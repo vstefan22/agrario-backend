@@ -145,7 +145,6 @@ else:
     }
 
 AUTH_USER_MODEL = 'accounts.MarketUser'
-
 firebase_credentials_path = os.getenv("FIREBASE_CREDENTIALS_JSON_PATH")
 firebase_credentials_base64 = os.getenv("FIREBASE_CREDENTIALS_BASE64")
 
@@ -157,12 +156,14 @@ try:
     elif firebase_credentials_base64:
         # Decode the Base64 string into JSON
         credentials_info = json.loads(
-            base64.b64decode(firebase_credentials_base64).decode('utf-8'))
+            base64.b64decode(firebase_credentials_base64).decode("utf-8")
+        )
     else:
         raise Exception("Firebase credentials not provided.")
 except Exception as e:
     logging.error(f"Error loading Firebase credentials: {e}")
     raise
+
 
 # GOOGLE CLOUD
 google_credentials_path = os.getenv("GOOGLE_CREDENTIALS_JSON_PATH")
