@@ -51,6 +51,11 @@ jobs:
           echo $GOOGLE_CREDENTIALS_BASE64 | base64 -d > google-credentials.json
           echo "GOOGLE_CREDENTIALS_JSON_PATH=google-credentials.json" >> $GITHUB_ENV
 
+      - name: Set Environment Variables
+        run: |
+          echo "FRONTEND_URL=http://localhost:5173" >> $GITHUB_ENV
+          echo "BACKEND_URL=http://127.0.0.1:8000" >> $GITHUB_ENV
+
       - name: Set up PostgreSQL
         env:
           DATABASE_URL: postgres://ufav6e2g8vvcga:pa48301d496c284ee80258e838b1531f950f963c607bb9a100bf8006a7d0cc7d7@c3cj4hehegopde.cluster-czrs8kj4isg7.us-east-1.rds.amazonaws.com:5432/ddcrncnopvagu
