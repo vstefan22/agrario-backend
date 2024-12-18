@@ -5,14 +5,13 @@ import json
 from pathlib import Path
 from datetime import timedelta
 import dj_database_url
-
-import firebase_admin
-from firebase_admin import credentials
+import django_heroku
 
 from dotenv import load_dotenv
 from google.oauth2 import service_account
 
 load_dotenv()
+django_heroku.settings(locals())
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -64,7 +63,10 @@ INSTALLED_APPS = [
     # DRF
     'rest_framework',
     'corsheaders',
+    'rest_framework.authtoken',
 
+    # custom apps
+    'accounts',
 ]
 
 MIDDLEWARE = [
@@ -79,6 +81,17 @@ MIDDLEWARE = [
     # CORS
     "corsheaders.middleware.CorsMiddleware",
 ]
+
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework.authentication.TokenAuthentication',
+    ],
+    'DEFAULT_PERMISSION_CLASSES': [
+        'rest_framework.permissions.IsAuthenticated',
+    ],
+    'EXCEPTION_HANDLER': 'rest_framework.views.exception_handler',
+}
+
 
 ROOT_URLCONF = 'agrario_backend.urls'
 
@@ -130,42 +143,28 @@ else:
         'default': dj_database_url.config()
     }
 
+AUTH_USER_MODEL = 'accounts.MarketUser'
 
 # FIREBASE AUTH
 firebase_credentials_path = os.getenv("FIREBASE_CREDENTIALS_JSON_PATH")
-
 if firebase_credentials_path and os.path.exists(firebase_credentials_path):
-    print('WRONG!')
-    with open(firebase_credentials_path, 'r') as f:
+    with open(firebase_credentials_path, "r") as f:
         credentials_info = json.load(f)
-elif os.getenv("FIREBASE_CREDENTIALS_JSON"):
-    print('CORRECT!')
-    credentials_info = json.loads(os.getenv("FIREBASE_CREDENTIALS_JSON"))
 else:
     raise Exception("Firebase credentials not provided.")
 
-if not firebase_admin._apps:
-    cred = credentials.Certificate(credentials_info)
-    firebase_admin.initialize_app(cred)
 
-
-STATIC_URL = '/static/'
+# GOOGLE CLOUD
 google_credentials_path = os.getenv("GOOGLE_CREDENTIALS_JSON_PATH")
 if google_credentials_path and os.path.exists(google_credentials_path):
     with open(google_credentials_path, 'r') as f:
         credentials_info = json.load(f)
     GS_CREDENTIALS = service_account.Credentials.from_service_account_info(
         credentials_info)
-else:
-    google_credentials_json = os.getenv("GOOGLE_CREDENTIALS_JSON")
-    if (google_credentials_json):
-        credentials_info = json.loads(google_credentials_json)
-        GS_CREDENTIALS = service_account.Credentials.from_service_account_info(
-            credentials_info)
 
-    else:
-        raise Exception(
-            "Google Cloud credentials path is not set in the environment.")
+else:
+    raise Exception(
+        "Google Cloud credentials path is not set in the environment.")
 
 STORAGES = {
     # FOR MEDIA FILES
@@ -235,3 +234,11 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
+
+
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = 'smtp.gmail.com'
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER')
+EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD')
