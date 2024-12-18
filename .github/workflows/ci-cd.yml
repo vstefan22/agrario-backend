@@ -44,6 +44,13 @@ jobs:
           echo $FIREBASE_CREDENTIALS_BASE64 | base64 -d > firebase-credentials.json
           echo "FIREBASE_CREDENTIALS_JSON_PATH=firebase-credentials.json" >> $GITHUB_ENV
 
+      - name: Decode Google Credentials
+        env:
+          GOOGLE_CREDENTIALS_BASE64: ${{ secrets.GOOGLE_CREDENTIALS_BASE64 }}
+        run: |
+          echo $GOOGLE_CREDENTIALS_BASE64 | base64 -d > google-credentials.json
+          echo "GOOGLE_CREDENTIALS_JSON_PATH=google-credentials.json" >> $GITHUB_ENV
+
       - name: Set up PostgreSQL
         env:
           DATABASE_URL: postgres://ufav6e2g8vvcga:pa48301d496c284ee80258e838b1531f950f963c607bb9a100bf8006a7d0cc7d7@c3cj4hehegopde.cluster-czrs8kj4isg7.us-east-1.rds.amazonaws.com:5432/ddcrncnopvagu
@@ -69,6 +76,13 @@ jobs:
           echo $FIREBASE_CREDENTIALS_BASE64 | base64 -d > firebase-credentials.json
           echo "FIREBASE_CREDENTIALS_JSON_PATH=firebase-credentials.json" >> $GITHUB_ENV
 
+      - name: Decode Google Credentials
+        env:
+          GOOGLE_CREDENTIALS_BASE64: ${{ secrets.GOOGLE_CREDENTIALS_BASE64 }}
+        run: |
+          echo $GOOGLE_CREDENTIALS_BASE64 | base64 -d > google-credentials.json
+          echo "GOOGLE_CREDENTIALS_JSON_PATH=google-credentials.json" >> $GITHUB_ENV
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
@@ -84,4 +98,4 @@ jobs:
 
       - name: Cleanup credentials
         run: |
-          rm -f firebase-credentials.json
+          rm -f firebase-credentials.json google-credentials.json

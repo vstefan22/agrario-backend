@@ -166,16 +166,30 @@ except Exception as e:
 
 
 # GOOGLE CLOUD
+# GOOGLE CLOUD
 google_credentials_path = os.getenv("GOOGLE_CREDENTIALS_JSON_PATH")
-if google_credentials_path and os.path.exists(google_credentials_path):
-    with open(google_credentials_path, 'r') as f:
-        credentials_info = json.load(f)
-    GS_CREDENTIALS = service_account.Credentials.from_service_account_info(
-        credentials_info)
+google_credentials_base64 = os.getenv("GOOGLE_CREDENTIALS_BASE64")
 
-else:
-    raise Exception(
-        "Google Cloud credentials path is not set in the environment.")
+try:
+    if google_credentials_path and os.path.exists(google_credentials_path):
+        # Use the credentials file if it exists
+        with open(google_credentials_path, "r") as f:
+            google_credentials_info = json.load(f)
+    elif google_credentials_base64:
+        # Decode the Base64 string into JSON
+        google_credentials_info = json.loads(
+            base64.b64decode(google_credentials_base64).decode("utf-8")
+        )
+    else:
+        raise Exception("Google Cloud credentials not provided.")
+
+    GS_CREDENTIALS = service_account.Credentials.from_service_account_info(
+        google_credentials_info
+    )
+
+except Exception as e:
+    logging.error(f"Error loading Google Cloud credentials: {e}")
+    raise
 
 STORAGES = {
     # FOR MEDIA FILES
