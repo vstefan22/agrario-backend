@@ -157,7 +157,7 @@ try:
     elif firebase_credentials_base64:
         # Decode the Base64 string into JSON
         credentials_info = json.loads(
-            base64.b64decode(firebase_credentials_base64))
+            base64.b64decode(firebase_credentials_base64).decode('utf-8'))
     else:
         raise Exception("Firebase credentials not provided.")
 except Exception as e:
