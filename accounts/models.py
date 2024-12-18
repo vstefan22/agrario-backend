@@ -10,6 +10,11 @@ class MarketUser(AbstractUser):
     address = models.CharField(max_length=255, null=True, blank=True)
     is_email_confirmed = models.BooleanField(default=False)
 
+    class Meta:
+        ordering = ['email']
+        verbose_name = 'Market User'
+        verbose_name_plural = 'Market Users'
+
     groups = models.ManyToManyField(
         'auth.Group',
         related_name='marketuser_groups',  # Unique related name
@@ -47,6 +52,13 @@ class ProjectDeveloper(MarketUser):
 
 
 class InviteLink(models.Model):
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = 'Invite Link'
+        verbose_name_plural = 'Invite Links'
+
+        
     uri_hash = models.CharField(max_length=16, unique=True, default=uuid.uuid4().hex[:16])
     created_by = models.ForeignKey(
         MarketUser,

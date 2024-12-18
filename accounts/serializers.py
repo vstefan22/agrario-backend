@@ -4,10 +4,8 @@ from django.contrib.auth.tokens import default_token_generator
 from django.utils.http import urlsafe_base64_encode
 from django.utils.encoding import force_bytes
 from django.core.mail import send_mail
-from django.contrib.auth import authenticate
-from django.utils.translation import gettext_lazy as _
 from django.contrib.auth.password_validation import validate_password
-
+from django.utils.translation import gettext_lazy as _
 
 class UserSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, required=True, validators=[validate_password])
@@ -18,9 +16,7 @@ class UserSerializer(serializers.ModelSerializer):
         fields = ['id', 'username', 'first_name', 'last_name', 'email', 'password', 'confirm_password']
 
     def validate(self, attrs):
-        password = attrs.get('password')
-        confirm_password = attrs.get('confirm_password')
-        if password != confirm_password:
+        if attrs.get('password') != attrs.get('confirm_password'):
             raise serializers.ValidationError({"password": "Passwords must match."})
         return attrs
 
@@ -46,8 +42,6 @@ class UserSerializer(serializers.ModelSerializer):
         instance.save()
         return instance
 
-
-
 class UserRegistrationSerializer(serializers.ModelSerializer):
     invite_code = serializers.CharField(write_only=True, required=False)
 
@@ -71,14 +65,17 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
         # Generate email confirmation token
         token = default_token_generator.make_token(user)
         uid = urlsafe_base64_encode(force_bytes(user.pk))
-        
-        # Confirmation link (replace `localhost` with your frontend/backend URL)
-        confirmation_link = f"http://localhost:8000/api/accounts/confirm-email/{uid}/{token}/"
+
+        # Use Django's reverse to generate the URL
+        from django.urls import reverse
+        confirmation_link = reverse(
+            'confirm-email', kwargs={'uidb64': uid, 'token': token}
+        )
 
         # Send the email
         send_mail(
             subject="Confirm Your Email Address",
-            message=f"Hi {user.username},\n\nClick the link below to confirm your email:\n{confirmation_link}",
+            message=f"Hi {user.username},\n\nClick the link below to confirm your email:\nhttp://localhost:8000{confirmation_link}",
             from_email="noreply@example.com",
             recipient_list=[user.email],
         )
@@ -92,9 +89,12 @@ class LoginSerializer(serializers.Serializer):
         password = attrs.get('password')
 
         # Authenticate using email
-        user = authenticate(email=email, password=password)
-        print("Serializer:", user)
-        if not user:
+        try:
+            user = MarketUser.objects.get(email=email)
+        except MarketUser.DoesNotExist:
+            raise serializers.ValidationError(_("Invalid email or password."))
+
+        if not user.check_password(password):
             raise serializers.ValidationError(_("Invalid email or password."))
 
         # Check if the email is confirmed
