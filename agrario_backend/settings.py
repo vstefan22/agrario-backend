@@ -6,7 +6,7 @@ from pathlib import Path
 from datetime import timedelta
 import dj_database_url
 # import django_heroku
-
+import base64
 from dotenv import load_dotenv
 from google.oauth2 import service_account
 
@@ -145,11 +145,17 @@ else:
 
 AUTH_USER_MODEL = 'accounts.MarketUser'
 
-# FIREBASE AUTH
 firebase_credentials_path = os.getenv("FIREBASE_CREDENTIALS_JSON_PATH")
+firebase_credentials_base64 = os.getenv("FIREBASE_CREDENTIALS_BASE64")
+
 if firebase_credentials_path and os.path.exists(firebase_credentials_path):
+    # Use the credentials file if it exists
     with open(firebase_credentials_path, "r") as f:
         credentials_info = json.load(f)
+elif firebase_credentials_base64:
+    # Decode the Base64 string into JSON
+    credentials_info = json.loads(
+        base64.b64decode(firebase_credentials_base64))
 else:
     raise Exception("Firebase credentials not provided.")
 
