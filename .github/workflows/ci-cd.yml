@@ -65,7 +65,6 @@ jobs:
 
       - name: Run tests
         run: python manage.py test
-
   deploy:
     name: Deploy to Heroku
     runs-on: ubuntu-latest
@@ -93,11 +92,16 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Install Heroku CLI
+        run: |
+          curl https://cli-assets.heroku.com/install.sh | sh
+
       - name: Deploy to Heroku
         env:
           HEROKU_API_KEY: ${{ secrets.HEROKU_API_KEY }}
           HEROKU_APP_NAME: ${{ secrets.HEROKU_APP_NAME }}
         run: |
+          heroku auth:token
           heroku git:remote -a ${{ secrets.HEROKU_APP_NAME }}
           git push heroku main
 
