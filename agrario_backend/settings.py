@@ -29,7 +29,8 @@ DEBUG = os.getenv('DEBUG', 'False')
 FRONTEND_URL = os.getenv('FRONTEND_URL')
 BACKEND_URL = os.getenv('BACKEND_URL')
 
-ALLOWED_HOSTS = ["127.0.0.1"]
+ALLOWED_HOSTS = ["127.0.0.1",
+                 'agrario-backend-cc0a3b9c6ae6.herokuapp.com', 'localhost']
 
 
 CSRF_TRUSTED_ORIGINS = [FRONTEND_URL, BACKEND_URL]
