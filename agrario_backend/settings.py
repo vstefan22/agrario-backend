@@ -8,6 +8,7 @@ from pathlib import Path
 from datetime import timedelta
 from dotenv import load_dotenv
 from google.oauth2 import service_account
+from drf_yasg import openapi
 import dj_database_url
 
 # Load environment variables
@@ -42,7 +43,21 @@ INSTALLED_APPS = [
     'corsheaders',
     'accounts',
     'offers',
+
+    'drf_yasg', 
 ]
+
+
+SWAGGER_SETTINGS = {
+    'DEFAULT_INFO': 'agrario_backend.urls.swagger_info',
+    'USE_SESSION_AUTH': False,
+    'JSON_EDITOR': True,
+    'VALIDATOR_URL': None,  # Disable online validator
+    'LOGOUT_URL': 'logout/',  # Add a logout URL if needed
+}
+
+
+
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
@@ -54,6 +69,14 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'corsheaders.middleware.CorsMiddleware',
 ]
+
+CORS_ALLOWED_ORIGINS = [
+    "http://127.0.0.1:8000",
+    "http://localhost:8000",
+]
+
+
+CORS_ALLOW_ALL_ORIGINS = True
 
 TEMPLATES = [
     {
@@ -111,7 +134,6 @@ GS_CREDENTIALS = None
 google_credentials_path = os.getenv('GOOGLE_CREDENTIALS_JSON_PATH')
 google_credentials_base64 = os.getenv('GOOGLE_CREDENTIALS_BASE64')
 
-print("GOOGLE CREDENTIALS PATH: ", google_credentials_path)
 
 try:
     if google_credentials_path and os.path.exists(google_credentials_path):
