@@ -6,6 +6,10 @@ from django.utils.encoding import force_bytes
 from django.core.mail import send_mail
 from django.contrib.auth.password_validation import validate_password
 from django.utils.translation import gettext_lazy as _
+from offers.models import Parcel, AreaOffer
+from offers.serializers import ParcelSerializer, AreaOfferSerializer
+from .models import Landowner, ProjectDeveloper
+
 
 class UserSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, required=True, validators=[validate_password])
@@ -44,17 +48,20 @@ class UserSerializer(serializers.ModelSerializer):
 
 class UserRegistrationSerializer(serializers.ModelSerializer):
     invite_code = serializers.CharField(write_only=True, required=False)
+    role = serializers.ChoiceField(choices=MarketUser.ROLE_CHOICES)
 
     class Meta:
         model = MarketUser
-        fields = ['username', 'email', 'password', 'invite_code']
+        fields = ['username', 'email', 'password', 'invite_code', 'role']
 
     def create(self, validated_data):
-        validated_data.pop('invite_code', None)  # Remove invite_code; it's not part of the model
+        validated_data.pop('invite_code', None)
+        role = validated_data.pop('role', 'landowner')
         user = MarketUser.objects.create_user(
             username=validated_data['username'],
             email=validated_data['email'],
             password=validated_data['password'],
+            role=role
         )
         return user
 
@@ -103,3 +110,36 @@ class LoginSerializer(serializers.Serializer):
 
         attrs['user'] = user
         return attrs
+    
+
+class LandownerDashboardSerializer(serializers.ModelSerializer):
+    parcels = serializers.SerializerMethodField()
+    offers = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Landowner
+        fields = ['id', 'username', 'email', 'parcels', 'offers']
+
+    def get_parcels(self, obj):
+        parcels = Parcel.objects.filter(created_by=obj)
+        return ParcelSerializer(parcels, many=True).data
+
+    def get_offers(self, obj):
+        offers = AreaOffer.objects.filter(created_by=obj)
+        return AreaOfferSerializer(offers, many=True).data
+    
+class DeveloperDashboardSerializer(serializers.ModelSerializer):
+    watchlist = serializers.SerializerMethodField()
+    auctions = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ProjectDeveloper
+        fields = ['id', 'username', 'email', 'watchlist', 'auctions']
+
+    def get_watchlist(self, obj):
+        watchlist = obj.projectdeveloperwatchlist_set.all()
+        return ParcelSerializer([item.parcel for item in watchlist], many=True).data
+
+    def get_auctions(self, obj):
+        auctions = AreaOffer.objects.filter(status='ACTIVE')
+        return AreaOfferSerializer(auctions, many=True).data

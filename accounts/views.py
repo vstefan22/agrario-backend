@@ -11,30 +11,25 @@ from rest_framework.views import APIView
 from django.contrib.auth.tokens import default_token_generator
 from django.contrib.auth import authenticate, login
 from rest_framework.authtoken.models import Token
+from .models import Landowner, ProjectDeveloper
+from offers.models import Parcel, AreaOffer
 
 class MarketUserViewSet(viewsets.ModelViewSet):
     queryset = MarketUser.objects.all()
     serializer_class = UserRegistrationSerializer
 
     def get_permissions(self):
-        """
-        Override permissions for specific actions.
-        """
-        if self.action in ['create', 'dashboard']:
-            if self.action == 'create':
-                return [AllowAny()]
-            return [IsAuthenticated()]  # Auth required for dashboard
+        if self.action == 'create':
+            return [AllowAny()]
         return [IsAuthenticated()]  # Default for other actions
 
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         user = serializer.save()
-
-        # Send confirmation email
         serializer.send_confirmation_email(user)
-
         return Response({"message": "User registered successfully"}, status=status.HTTP_201_CREATED)
+
     
     @action(detail=True, methods=['post'])
     def generate_invite_link(self, request, pk=None):
@@ -56,26 +51,6 @@ class MarketUserViewSet(viewsets.ModelViewSet):
             "message": "Invite link generated and sent via email."
         }, status=status.HTTP_200_OK)
 
-    @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated])
-    def dashboard(self, request):
-        """
-        Custom action to fetch dashboard details for the authenticated user.
-        """
-        user = request.user  # Get the authenticated user
-        user_data = UserSerializer(user).data  # Serialize user details
-
-        # Example: Add additional dashboard-specific data
-        dashboard_data = {
-            "user_info": user_data,
-            "dashboard_greeting": f"Welcome to your dashboard, {user.username}!",
-            "important_links": [
-                {"name": "Profile", "url": "/profile"},
-                {"name": "Settings", "url": "/settings"},
-                {"name": "Logout", "url": "/logout"},
-            ],
-        }
-
-        return Response(dashboard_data)
 
 
 class ConfirmEmailView(APIView):
@@ -141,3 +116,40 @@ class LoginView(APIView):
         # Serialize user data
         user_data = UserSerializer(user).data
         return Response({'token': token.key, 'user': user_data}, status=status.HTTP_200_OK)
+
+
+class RoleDashboardView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+        if user.role == 'landowner':
+            parcels = Parcel.objects.filter(owner=user).count()
+            active_offers = AreaOffer.objects.filter(parcel__owner=user, is_active=True).count()
+            return Response({
+                "dashboard_greeting": f"Welcome Landowner {user.username}!",
+                "parcels_owned": parcels,
+                "active_offers": active_offers,
+                "quick_links": [
+                    {"name": "Manage Parcels", "url": "/parcels"},
+                    {"name": "Place Offers", "url": "/offers"},
+                    {"name": "Analysis & Reports", "url": "/analysis"},
+                ],
+                "notifications": "You have 2 new messages."
+            })
+
+        elif user.role == 'developer':
+            watchlist_items = Parcel.objects.filter(offers__parcel__owner=user).count()
+            active_auctions = AreaOffer.objects.filter(is_active=True).count()
+            return Response({
+                "dashboard_greeting": f"Welcome Developer {user.username}!",
+                "watchlist_items": watchlist_items,
+                "active_auctions": active_auctions,
+                "quick_links": [
+                    {"name": "Search Parcels", "url": "/search"},
+                    {"name": "Manage Profile", "url": "/profile"},
+                    {"name": "Subscriptions", "url": "/subscriptions"},
+                ],
+                "notifications": "You have 1 new bid update."
+            })
+        return Response({"error": "Role not assigned or invalid"}, status=400)

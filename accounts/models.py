@@ -4,35 +4,22 @@ import uuid
 
 # Base User Model
 class MarketUser(AbstractUser):
+    ROLE_CHOICES = (
+        ('landowner', 'Landowner'),
+        ('developer', 'Project Developer'),
+    )
     identifier = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     email = models.EmailField(unique=True)
     phone_number = models.CharField(max_length=15, null=True, blank=True)
     address = models.CharField(max_length=255, null=True, blank=True)
     is_email_confirmed = models.BooleanField(default=False)
+    role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='landowner')
 
-    class Meta:
-        ordering = ['email']
-        verbose_name = 'Market User'
-        verbose_name_plural = 'Market Users'
-
-    groups = models.ManyToManyField(
-        'auth.Group',
-        related_name='marketuser_groups',  # Unique related name
-        blank=True,
-        help_text='The groups this user belongs to.'
-    )
-    user_permissions = models.ManyToManyField(
-        'auth.Permission',
-        related_name='marketuser_permissions',  # Unique related name
-        blank=True,
-        help_text='Specific permissions for this user.'
-    )
-
-    USERNAME_FIELD = 'email'  # Use email for authentication
+    USERNAME_FIELD = 'email'
     REQUIRED_FIELDS = ['username']
 
     def __str__(self):
-        return self.username
+        return f"{self.username} ({self.get_role_display()})"
 
     @property
     def id(self):
@@ -52,22 +39,16 @@ class ProjectDeveloper(MarketUser):
 
 
 class InviteLink(models.Model):
-
-    class Meta:
-        ordering = ['-created_at']
-        verbose_name = 'Invite Link'
-        verbose_name_plural = 'Invite Links'
-
-        
     uri_hash = models.CharField(max_length=16, unique=True, default=uuid.uuid4().hex[:16])
     created_by = models.ForeignKey(
         MarketUser,
         on_delete=models.CASCADE,
         related_name='invites'
     )
+    successful_referrals = models.PositiveIntegerField(default=0)
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
-        return self.uri_hash
+        return f"Invite by {self.created_by.username} - Active: {self.is_active}"
