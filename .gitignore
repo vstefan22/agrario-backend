@@ -1,0 +1,6 @@
+/.env
+/venv
+/firebase-credentials.json
+/google-credentials.json
+/firebase-credentials.json.base64
+/google-credentials.json.base64
