@@ -1,29 +1,41 @@
-from rest_framework import viewsets
+"""
+Views for user management and authentication in the Marketplace application.
+
+Includes views for user registration, login, email confirmation, and role-based dashboards.
+"""
+
+from rest_framework import viewsets, status
 from rest_framework.response import Response
-from rest_framework import status
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework.views import APIView
+from rest_framework.authtoken.models import Token
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
-from .models import MarketUser, InviteLink
-from .serializers import UserRegistrationSerializer, UserSerializer
-from django.core.mail import send_mail
 from django.utils.http import urlsafe_base64_decode
-from rest_framework.views import APIView
+from django.core.mail import send_mail
 from django.contrib.auth.tokens import default_token_generator
-from django.contrib.auth import authenticate, login
-from rest_framework.authtoken.models import Token
-from .models import Landowner, ProjectDeveloper
+from django.contrib.auth import authenticate
+
+from .models import MarketUser, InviteLink, Landowner, ProjectDeveloper
+from .serializers import UserRegistrationSerializer, UserSerializer
 from offers.models import Parcel, AreaOffer
 
+
 class MarketUserViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for managing MarketUser instances.
+    """
     queryset = MarketUser.objects.all()
     serializer_class = UserRegistrationSerializer
 
     def get_permissions(self):
+        """
+        Set permissions based on the action being performed.
+        """
         if self.action == 'create':
             return [AllowAny()]
-        return [IsAuthenticated()]  # Default for other actions
+        return [IsAuthenticated()]
 
     @swagger_auto_schema(
         tags=['User Management'],
@@ -36,6 +48,9 @@ class MarketUserViewSet(viewsets.ModelViewSet):
         },
     )
     def create(self, request, *args, **kwargs):
+        """
+        Create a new user and send a confirmation email.
+        """
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         user = serializer.save()
@@ -61,8 +76,11 @@ class MarketUserViewSet(viewsets.ModelViewSet):
     )
     @action(detail=True, methods=['post'])
     def generate_invite_link(self, request, pk=None):
+        """
+        Generate an invitation link for the specified user.
+        """
         user = self.get_object()
-        invite_link, created = InviteLink.objects.get_or_create(created_by=user, is_active=True)
+        invite_link, _ = InviteLink.objects.get_or_create(created_by=user, is_active=True)
         invitation_code = invite_link.uri_hash
         invitation_link = f"http://localhost:8000/register?invite_code={invitation_code}"
 
@@ -80,7 +98,10 @@ class MarketUserViewSet(viewsets.ModelViewSet):
 
 
 class ConfirmEmailView(APIView):
-    permission_classes = [AllowAny]  # Allow anyone to access this endpoint
+    """
+    API view for confirming a user's email.
+    """
+    permission_classes = [AllowAny]
 
     @swagger_auto_schema(
         tags=['User Management'],
@@ -92,6 +113,9 @@ class ConfirmEmailView(APIView):
         },
     )
     def get(self, request, uidb64, token):
+        """
+        Confirm a user's email based on the token and uid.
+        """
         try:
             uid = urlsafe_base64_decode(uidb64).decode()
             user = MarketUser.objects.get(pk=uid)
@@ -112,6 +136,9 @@ class ConfirmEmailView(APIView):
 
 
 class LoginView(APIView):
+    """
+    API view for user login.
+    """
     permission_classes = [AllowAny]
 
     @swagger_auto_schema(
@@ -145,6 +172,9 @@ class LoginView(APIView):
         },
     )
     def post(self, request):
+        """
+        Authenticate a user and return a token upon successful login.
+        """
         email = request.data.get('email')
         password = request.data.get('password')
 
@@ -162,51 +192,38 @@ class LoginView(APIView):
         if not user.is_email_confirmed:
             return Response({'error': 'Please confirm your email before logging in.'}, status=status.HTTP_403_FORBIDDEN)
 
-        try:
-            token, _ = Token.objects.get_or_create(user=user)
-        except Exception as e:
-            return Response({'error': f'Failed to create token: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
+        token, _ = Token.objects.get_or_create(user=user)
         user_data = UserSerializer(user).data
         return Response({'token': token.key, 'user': user_data}, status=status.HTTP_200_OK)
 
 
 class RoleDashboardView(APIView):
+    """
+    API view for retrieving role-based dashboard data.
+    """
     permission_classes = [IsAuthenticated]
 
     @swagger_auto_schema(
         tags=['Dashboard'],
         operation_summary="Get dashboard",
-        operation_description="Retrieve role-specific dashboard data based on whether the user is a landowner or developer.",
+        operation_description="Retrieve role-specific dashboard data based on the user's role.",
         responses={
-            200: openapi.Response(
-                description="Role-specific dashboard",
-                examples={
-                    "application/json": {
-                        "dashboard_greeting": "Welcome Landowner user!",
-                        "parcels_owned": 3,
-                        "active_offers": 2,
-                        "quick_links": [
-                            {"name": "Manage Parcels", "url": "/parcels"},
-                            {"name": "Place Offers", "url": "/offers"},
-                            {"name": "Analysis & Reports", "url": "/analysis"}
-                        ],
-                        "notifications": "You have 2 new messages."
-                    }
-                }
-            ),
-            400: "Role not assigned or invalid",
+            200: openapi.Response("Role-specific dashboard data"),
+            400: "Invalid or missing role",
         },
     )
     def get(self, request):
+        """
+        Retrieve dashboard data for the authenticated user.
+        """
         user = request.user
         if user.role == 'landowner':
-            parcels = Parcel.objects.filter(owner=user).count()
-            active_offers = AreaOffer.objects.filter(parcel__owner=user, is_active=True).count()
+            parcels_count = Parcel.objects.filter(owner=user).count()
+            offers_count = AreaOffer.objects.filter(parcel__owner=user, is_active=True).count()
             return Response({
                 "dashboard_greeting": f"Welcome Landowner {user.username}!",
-                "parcels_owned": parcels,
-                "active_offers": active_offers,
+                "parcels_owned": parcels_count,
+                "active_offers": offers_count,
                 "quick_links": [
                     {"name": "Manage Parcels", "url": "/parcels"},
                     {"name": "Place Offers", "url": "/offers"},
@@ -215,13 +232,13 @@ class RoleDashboardView(APIView):
                 "notifications": "You have 2 new messages."
             })
 
-        elif user.role == 'developer':
-            watchlist_items = Parcel.objects.filter(offers__parcel__owner=user).count()
-            active_auctions = AreaOffer.objects.filter(is_active=True).count()
+        if user.role == 'developer':
+            watchlist_count = Parcel.objects.filter(offers__parcel__owner=user).count()
+            auctions_count = AreaOffer.objects.filter(is_active=True).count()
             return Response({
                 "dashboard_greeting": f"Welcome Developer {user.username}!",
-                "watchlist_items": watchlist_items,
-                "active_auctions": active_auctions,
+                "watchlist_items": watchlist_count,
+                "active_auctions": auctions_count,
                 "quick_links": [
                     {"name": "Search Parcels", "url": "/search"},
                     {"name": "Manage Profile", "url": "/profile"},
@@ -229,4 +246,5 @@ class RoleDashboardView(APIView):
                 ],
                 "notifications": "You have 1 new bid update."
             })
-        return Response({"error": "Role not assigned or invalid"}, status=400)
+
+        return Response({"error": "Role not assigned or invalid"}, status=status.HTTP_400_BAD_REQUEST)

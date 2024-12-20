@@ -1,9 +1,16 @@
+"""
+Models for user management in the marketplace application.
+"""
+
+import uuid
 from django.db import models
 from django.contrib.auth.models import AbstractUser
-import uuid
 
 # Base User Model
 class MarketUser(AbstractUser):
+    """
+    Custom user model for the marketplace application.
+    """
     ROLE_CHOICES = (
         ('landowner', 'Landowner'),
         ('developer', 'Project Developer'),
@@ -23,22 +30,31 @@ class MarketUser(AbstractUser):
 
     @property
     def id(self):
-        """Alias 'identifier' as 'id' for compatibility."""
+        """
+        Alias 'identifier' as 'id' for compatibility.
+        """
         return self.identifier
 
 
-# Landowner Model (inherits from MarketUser)
 class Landowner(MarketUser):
+    """
+    Model for Landowners, inheriting from MarketUser.
+    """
     position = models.CharField(max_length=100, null=True, blank=True)
 
 
-# ProjectDeveloper Model (inherits from MarketUser)
 class ProjectDeveloper(MarketUser):
+    """
+    Model for Project Developers, inheriting from MarketUser.
+    """
     company_name = models.CharField(max_length=255, null=True, blank=True)
     company_website = models.URLField(null=True, blank=True)
 
 
 class InviteLink(models.Model):
+    """
+    Model for managing invitation links.
+    """
     uri_hash = models.CharField(max_length=16, unique=True, default=uuid.uuid4().hex[:16])
     created_by = models.ForeignKey(
         MarketUser,
