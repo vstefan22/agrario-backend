@@ -5,6 +5,7 @@ Views for the Offers application.
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated 
 from .models import Landuse, Parcel, AreaOffer, AreaOfferDocuments, AreaOfferConfirmation, AreaOfferAdministration
 from .serializers import (
     LanduseSerializer,
@@ -13,6 +14,7 @@ from .serializers import (
     AreaOfferDocumentsSerializer,
     AreaOfferConfirmationSerializer,
     AreaOfferAdministrationSerializer,
+    AuctionPlacementSerializer
 )
 
 
@@ -56,3 +58,21 @@ class AreaOfferViewSet(viewsets.ModelViewSet):
             {"message": "Offer confirmed successfully.", "confirmation_id": confirmation.id},
             status=status.HTTP_201_CREATED
         )
+    
+    @action(detail=False, methods=['post'], permission_classes=[IsAuthenticated])
+    def place_auction(self, request):
+        if request.user.role != 'landowner':
+            return Response({"error": "Only landowners can place auctions."}, status=status.HTTP_403_FORBIDDEN)
+        serializer = AuctionPlacementSerializer(data=request.data, context={'request': request})
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class AreaOfferDocumentsViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for managing AreaOfferDocuments instances.
+    """
+    queryset = AreaOfferDocuments.objects.all()
+    serializer_class = AreaOfferDocumentsSerializer

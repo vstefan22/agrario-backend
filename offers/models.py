@@ -38,6 +38,10 @@ class AreaOffer(models.Model):
     """
     parcel = models.ForeignKey(Parcel, on_delete=models.CASCADE, related_name="offers")
     price = models.DecimalField(max_digits=10, decimal_places=2)
+    bidding_conditions = models.JSONField(null=True, blank=True)
+    documents = models.ManyToManyField(
+        'AreaOfferDocuments', related_name="linked_offers", blank=True  # Changed related_name
+    )
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -49,7 +53,9 @@ class AreaOfferDocuments(models.Model):
     """
     Model representing documents associated with an area offer.
     """
-    offer = models.ForeignKey(AreaOffer, on_delete=models.CASCADE, related_name="documents")
+    offer = models.ForeignKey(
+        AreaOffer, on_delete=models.CASCADE, related_name="documented_offers"  # Changed related_name
+    )
     document = models.FileField(upload_to="area_offer_documents/")
     uploaded_at = models.DateTimeField(auto_now_add=True)
 
