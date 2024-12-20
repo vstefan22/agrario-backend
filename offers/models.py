@@ -76,3 +76,15 @@ class AreaOfferAdministration(models.Model):
     offer = models.ForeignKey(AreaOffer, on_delete=models.CASCADE, related_name="administration")
     notes = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
+
+
+class Report(models.Model):
+    """
+    Model to store calculated data for a selected parcel or map area.
+    """
+    parcel = models.ForeignKey(Parcel, on_delete=models.CASCADE, related_name="reports", null=True, blank=True)
+    calculation_result = models.JSONField()  # Store calculation output as JSON
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Report for Parcel ID {self.parcel.id if self.parcel else 'Unknown'} created at {self.created_at}"
