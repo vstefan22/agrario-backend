@@ -201,9 +201,7 @@ class RoleDashboardView(APIView):
     """
     API view for retrieving role-based dashboard data.
     """
-    print("ROLEDASHBOARD VIEW ACCESSED")
     permission_classes = [IsAuthenticated]
-    print(f"Permissions: {permission_classes}")
 
 
     @swagger_auto_schema(
@@ -218,13 +216,6 @@ class RoleDashboardView(APIView):
 
 
     def get(self, request):
-        print("ROLEDASHBOARD VIEW ACCESSED")
-        print(f"Request Headers: {dict(request.headers)}")
-        print(f"Authorization: {request.headers.get('Authorization')}")
-        print(f"Authenticated User: {request.user}")
-        print(f"Is Authenticated: {request.user.is_authenticated}")
-        print(f"User Role: {getattr(request.user, 'role', None)}")
-        print(f"User ID: {getattr(request.user, 'id', None)}")
 
         # Check if user is authenticated
         if not request.user.is_authenticated:
@@ -281,11 +272,3 @@ class RoleDashboardView(APIView):
         print("Error: Role not assigned or invalid")
         return Response({"error": "Role not assigned or invalid"}, status=status.HTTP_400_BAD_REQUEST)
     
-
-
-
-class TestView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def get(self, request):
-        return Response({"message": "Token authentication successful", "user": str(request.user)})

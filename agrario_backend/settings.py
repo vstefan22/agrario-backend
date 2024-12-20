@@ -38,6 +38,18 @@ CSRF_TRUSTED_ORIGINS = [FRONTEND_URL, BACKEND_URL]
 CORS_ALLOWED_ORIGINS = [FRONTEND_URL, BACKEND_URL]
 CORS_ALLOW_CREDENTIALS = True
 
+SWAGGER_SETTINGS = {
+    'SECURITY_DEFINITIONS': {
+        'Token': {
+            'type': 'apiKey',
+            'name': 'Authorization',
+            'in': 'header'
+        }
+    },
+    'USE_SESSION_AUTH': False,
+    'DEFAULT_AUTO_SCHEMA_CLASS': 'drf_yasg.inspectors.SwaggerAutoSchema',
+}
+
 # Application definition
 INSTALLED_APPS = [
     'django.contrib.admin',
