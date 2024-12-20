@@ -201,7 +201,10 @@ class RoleDashboardView(APIView):
     """
     API view for retrieving role-based dashboard data.
     """
+    print("ROLEDASHBOARD VIEW ACCESSED")
     permission_classes = [IsAuthenticated]
+    print(f"Permissions: {permission_classes}")
+
 
     @swagger_auto_schema(
         tags=['Dashboard'],
@@ -212,14 +215,34 @@ class RoleDashboardView(APIView):
             400: "Invalid or missing role",
         },
     )
+
+
     def get(self, request):
-        """
-        Retrieve dashboard data for the authenticated user.
-        """
+        print("ROLEDASHBOARD VIEW ACCESSED")
+        print(f"Request Headers: {dict(request.headers)}")
+        print(f"Authorization: {request.headers.get('Authorization')}")
+        print(f"Authenticated User: {request.user}")
+        print(f"Is Authenticated: {request.user.is_authenticated}")
+        print(f"User Role: {getattr(request.user, 'role', None)}")
+        print(f"User ID: {getattr(request.user, 'id', None)}")
+
+        # Check if user is authenticated
+        if not request.user.is_authenticated:
+            print("Authentication failed: User not authenticated")
+            return Response({"error": "User not authenticated"}, status=status.HTTP_401_UNAUTHORIZED)
+
         user = request.user
+
+        # Check if the user role is 'landowner'
         if user.role == 'landowner':
-            parcels_count = Parcel.objects.filter(owner=user).count()
-            offers_count = AreaOffer.objects.filter(parcel__owner=user, is_active=True).count()
+            try:
+                parcels_count = Parcel.objects.filter(owner=user).count()
+                offers_count = AreaOffer.objects.filter(parcel__owner=user, is_active=True).count()
+                print(f"Landowner Dashboard - Parcels Owned: {parcels_count}, Active Offers: {offers_count}")
+            except Exception as e:
+                print(f"Error while fetching Landowner data: {e}")
+                return Response({"error": "Failed to retrieve landowner data"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
             return Response({
                 "dashboard_greeting": f"Welcome Landowner {user.username}!",
                 "parcels_owned": parcels_count,
@@ -232,9 +255,16 @@ class RoleDashboardView(APIView):
                 "notifications": "You have 2 new messages."
             })
 
+        # Check if the user role is 'developer'
         if user.role == 'developer':
-            watchlist_count = Parcel.objects.filter(offers__parcel__owner=user).count()
-            auctions_count = AreaOffer.objects.filter(is_active=True).count()
+            try:
+                watchlist_count = Parcel.objects.filter(offers__parcel__owner=user).count()
+                auctions_count = AreaOffer.objects.filter(is_active=True).count()
+                print(f"Developer Dashboard - Watchlist Items: {watchlist_count}, Active Auctions: {auctions_count}")
+            except Exception as e:
+                print(f"Error while fetching Developer data: {e}")
+                return Response({"error": "Failed to retrieve developer data"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
             return Response({
                 "dashboard_greeting": f"Welcome Developer {user.username}!",
                 "watchlist_items": watchlist_count,
@@ -247,4 +277,15 @@ class RoleDashboardView(APIView):
                 "notifications": "You have 1 new bid update."
             })
 
+        # Role not assigned or invalid
+        print("Error: Role not assigned or invalid")
         return Response({"error": "Role not assigned or invalid"}, status=status.HTTP_400_BAD_REQUEST)
+    
+
+
+
+class TestView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        return Response({"message": "Token authentication successful", "user": str(request.user)})
