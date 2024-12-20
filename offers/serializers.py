@@ -11,7 +11,8 @@ from .models import (
     AreaOffer,
     AreaOfferDocuments,
     AreaOfferConfirmation,
-    AreaOfferAdministration
+    AreaOfferAdministration,
+    Report
 )
 
 
@@ -81,3 +82,11 @@ class AuctionPlacementSerializer(serializers.ModelSerializer):
         if value.owner != self.context['request'].user:
             raise serializers.ValidationError("You can only create offers for your own parcels.")
         return value
+    
+class ReportSerializer(serializers.ModelSerializer):
+    """
+    Serializer for the Report model.
+    """
+    class Meta:
+        model = Report
+        fields = '__all__'
