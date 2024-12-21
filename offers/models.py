@@ -6,6 +6,7 @@ Defines models for Landuse, Parcel, AreaOffer, and related entities.
 
 from django.db import models
 from django.conf import settings
+# from django.contrib.gis.db import models as gis_models
 
 
 class Landuse(models.Model):
@@ -24,9 +25,16 @@ class Parcel(models.Model):
     Model representing a parcel of land.
     """
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="parcels")
-    landuse = models.ForeignKey(Landuse, on_delete=models.SET_NULL, null=True, blank=True)
+    landuse = models.CharField(max_length=100, blank=True, null=True)
     area = models.FloatField()  # Area in square meters
-    coordinates = models.JSONField()  # Store geographical data as GeoJSON or similar format
+    # geom = gis_models.PolygonField()  # Store geographical data as Polygon
+    coordinates = models.JSONField()  # Additional geo-coordinates if needed
+    status = models.CharField(
+        max_length=20, 
+        choices=[("draft", "Draft"), ("active", "Active")],
+        default="draft"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
         return f"Parcel owned by {self.owner} ({self.area} sqm)"
@@ -38,6 +46,10 @@ class AreaOffer(models.Model):
     """
     parcel = models.ForeignKey(Parcel, on_delete=models.CASCADE, related_name="offers")
     price = models.DecimalField(max_digits=10, decimal_places=2)
+    bidding_conditions = models.JSONField(null=True, blank=True)
+    documents = models.ManyToManyField(
+        'AreaOfferDocuments', related_name="linked_offers", blank=True  # Changed related_name
+    )
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -49,7 +61,9 @@ class AreaOfferDocuments(models.Model):
     """
     Model representing documents associated with an area offer.
     """
-    offer = models.ForeignKey(AreaOffer, on_delete=models.CASCADE, related_name="documents")
+    offer = models.ForeignKey(
+        AreaOffer, on_delete=models.CASCADE, related_name="documented_offers"  # Changed related_name
+    )
     document = models.FileField(upload_to="area_offer_documents/")
     uploaded_at = models.DateTimeField(auto_now_add=True)
 
@@ -70,3 +84,15 @@ class AreaOfferAdministration(models.Model):
     offer = models.ForeignKey(AreaOffer, on_delete=models.CASCADE, related_name="administration")
     notes = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
+
+
+class Report(models.Model):
+    """
+    Model to store calculated data for a selected parcel or map area.
+    """
+    parcel = models.ForeignKey(Parcel, on_delete=models.CASCADE, related_name="reports", null=True, blank=True)
+    calculation_result = models.JSONField()  # Store calculation output as JSON
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Report for Parcel ID {self.parcel.id if self.parcel else 'Unknown'} created at {self.created_at}"

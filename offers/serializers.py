@@ -5,7 +5,15 @@ Defines serializers for Landuse, Parcel, AreaOffer, and related models.
 """
 
 from rest_framework import serializers
-from .models import Landuse, Parcel, AreaOffer
+from .models import (
+    Landuse,
+    Parcel,
+    AreaOffer,
+    AreaOfferDocuments,
+    AreaOfferConfirmation,
+    AreaOfferAdministration,
+    Report
+)
 
 
 class LanduseSerializer(serializers.ModelSerializer):
@@ -35,14 +43,6 @@ class AreaOfferSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 
-from rest_framework import serializers
-from .models import (
-    AreaOfferDocuments,
-    AreaOfferConfirmation,
-    AreaOfferAdministration
-)
-
-
 class AreaOfferDocumentsSerializer(serializers.ModelSerializer):
     """Serializer for AreaOfferDocuments model."""
 
@@ -64,4 +64,29 @@ class AreaOfferAdministrationSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = AreaOfferAdministration
+        fields = '__all__'
+
+
+class AuctionPlacementSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = AreaOffer
+        fields = ['id', 'parcel', 'price', 'bidding_conditions', 'documents', 'is_active']
+        read_only_fields = ['id', 'is_active', 'created_at']
+
+    def validate_price(self, value):
+        if value <= 0:
+            raise serializers.ValidationError("Price must be a positive value.")
+        return value
+    
+    def validate_parcel(self, value):
+        if value.owner != self.context['request'].user:
+            raise serializers.ValidationError("You can only create offers for your own parcels.")
+        return value
+    
+class ReportSerializer(serializers.ModelSerializer):
+    """
+    Serializer for the Report model.
+    """
+    class Meta:
+        model = Report
         fields = '__all__'

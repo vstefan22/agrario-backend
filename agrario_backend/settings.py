@@ -1,33 +1,59 @@
-"""Django settings for agrario_backend project."""
+'''DEFINE SETTINGS FOR DJANGO PROJECT'''
 
+import os
+import json
+from pathlib import Path
 import os
 import json
 import base64
 import logging
-from pathlib import Path
-from datetime import timedelta
 from dotenv import load_dotenv
 from google.oauth2 import service_account
-from drf_yasg import openapi
 import dj_database_url
 
 # Load environment variables
 load_dotenv()
 
-# Base directory of the project
+# Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# Security settings
-SECRET_KEY = os.getenv('SECRET_KEY', 'default-secret-key')
-DEBUG = os.getenv('DEBUG', 'False').lower() == 'true'
-ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', '127.0.0.1,localhost').split(',')
+# Quick-start development settings - unsuitable for production
+# See https://docs.djangoproject.com/en/5.1/howto/deployment/checklist/
+
+# SECURITY WARNING: keep the secret key used in production secret!
+SECRET_KEY = 'django-insecure-g5jyq%m8oeq9rlmu4zw59^wka1#^gm(x839pg@hikive)9d^7%'
+
+# STRIPE
+STRIPE_SECRET_KEY = 'your_stripe_secret_key'  # Replace with actual key
+STRIPE_ENDPOINT_SECRET = 'your_stripe_endpoint_secret'  # Replace with actual key
+
+
+# SECURITY WARNING: don't run with debug turned on in production!
+DEBUG = True
+
+ALLOWED_HOSTS = []
+
+# Authentication settings
+AUTH_USER_MODEL = 'accounts.MarketUser'
 
 # CORS and CSRF settings
-FRONTEND_URL = os.getenv('FRONTEND_URL')
-BACKEND_URL = os.getenv('BACKEND_URL')
+FRONTEND_URL = os.getenv('FRONTEND_URL', 'http://localhost:3000')
+BACKEND_URL = os.getenv('BACKEND_URL', 'http://localhost:8000')
 CSRF_TRUSTED_ORIGINS = [FRONTEND_URL, BACKEND_URL]
 CORS_ALLOWED_ORIGINS = [FRONTEND_URL, BACKEND_URL]
 CORS_ALLOW_CREDENTIALS = True
+
+SWAGGER_SETTINGS = {
+    'SECURITY_DEFINITIONS': {
+        'Token': {
+            'type': 'apiKey',
+            'name': 'Authorization',
+            'in': 'header'
+        }
+    },
+    'USE_SESSION_AUTH': False,
+    'DEFAULT_AUTO_SCHEMA_CLASS': 'drf_yasg.inspectors.SwaggerAutoSchema',
+}
 
 # Application definition
 INSTALLED_APPS = [
@@ -43,21 +69,18 @@ INSTALLED_APPS = [
     'corsheaders',
     'accounts',
     'offers',
-
-    'drf_yasg', 
+    'drf_yasg',
+    # 'django.contrib.gis',
 ]
 
-
-SWAGGER_SETTINGS = {
-    'DEFAULT_INFO': 'agrario_backend.urls.swagger_info',
-    'USE_SESSION_AUTH': False,
-    'JSON_EDITOR': True,
-    'VALIDATOR_URL': None,  # Disable online validator
-    'LOGOUT_URL': 'logout/',  # Add a logout URL if needed
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework.authentication.TokenAuthentication',
+    ],
+    'DEFAULT_PERMISSION_CLASSES': [
+        'rest_framework.permissions.IsAuthenticated',
+    ],
 }
-
-
-
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
@@ -70,18 +93,20 @@ MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
 ]
 
-CORS_ALLOWED_ORIGINS = [
-    "http://127.0.0.1:8000",
-    "http://localhost:8000",
-]
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = 'smtp.gmail.com'
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER')
+EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD')
+DEFAULT_FROM_EMAIL = 'Agrario'
 
-
-CORS_ALLOW_ALL_ORIGINS = True
+ROOT_URLCONF = 'agrario_backend.urls'
 
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [BASE_DIR / 'templates'],
+        'DIRS': [],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -94,26 +119,12 @@ TEMPLATES = [
     },
 ]
 
-REST_FRAMEWORK = {
-    'DEFAULT_AUTHENTICATION_CLASSES': [
-        'rest_framework.authentication.TokenAuthentication',
-    ],
-    'DEFAULT_PERMISSION_CLASSES': [
-        'rest_framework.permissions.IsAuthenticated',
-    ],
-    'EXCEPTION_HANDLER': 'rest_framework.views.exception_handler',
-}
-
-ROOT_URLCONF = 'agrario_backend.urls'
 WSGI_APPLICATION = 'agrario_backend.wsgi.application'
 
 # Database configuration
 DATABASES = {
     'default': dj_database_url.config(default=f"sqlite:///{BASE_DIR}/db.sqlite3")
 }
-
-# Authentication settings
-AUTH_USER_MODEL = 'accounts.MarketUser'
 
 # Firebase configuration
 FIREBASE_CREDENTIALS = None
@@ -133,7 +144,6 @@ except Exception as e:
 GS_CREDENTIALS = None
 google_credentials_path = os.getenv('GOOGLE_CREDENTIALS_JSON_PATH')
 google_credentials_base64 = os.getenv('GOOGLE_CREDENTIALS_BASE64')
-
 
 try:
     if google_credentials_path and os.path.exists(google_credentials_path):
@@ -165,30 +175,34 @@ STORAGES = {
     },
 }
 
-# Email configuration
-EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-EMAIL_HOST = 'smtp.gmail.com'
-EMAIL_PORT = 587
-EMAIL_USE_TLS = True
-EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER')
-EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD')
-
 # Static files configuration
-STATIC_URL = '/static/'
+STATIC_URL = 'static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 
 # Password validation
 AUTH_PASSWORD_VALIDATORS = [
-    {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
-    {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator'},
-    {'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator'},
-    {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'},
+    {
+        'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
+    },
+    {
+        'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
+    },
+    {
+        'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
+    },
+    {
+        'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
+    },
 ]
 
 # Internationalization
 LANGUAGE_CODE = 'en-us'
+
 TIME_ZONE = 'UTC'
+
 USE_I18N = True
+
 USE_TZ = True
 
+# Default primary key field type
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'

@@ -122,6 +122,7 @@ class LoginSerializer(serializers.Serializer):
 
         try:
             user = MarketUser.objects.get(email=email)
+
         except MarketUser.DoesNotExist:
             raise serializers.ValidationError(_("Invalid email or password."))
 
@@ -132,6 +133,7 @@ class LoginSerializer(serializers.Serializer):
             raise serializers.ValidationError(_("Please confirm your email before logging in."))
 
         attrs['user'] = user
+  
         return attrs
 
 

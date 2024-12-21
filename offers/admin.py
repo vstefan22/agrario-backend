@@ -26,10 +26,12 @@ class AreaOfferAdmin(admin.ModelAdmin):
     list_filter = ('is_active',)
 
 
-@admin.register(AreaOfferDocuments)
 class AreaOfferDocumentsAdmin(admin.ModelAdmin):
-    list_display = ('id', 'offer', 'document', 'uploaded_at')
-    search_fields = ('offer__parcel__owner__username',)
+    list_display = ('id', 'get_offer', 'document', 'uploaded_at')
+
+    def get_offer(self, obj):
+        return obj.offer.__str__()  # Customize as needed to display offer details
+    get_offer.short_description = "Offer"
 
 
 @admin.register(AreaOfferConfirmation)

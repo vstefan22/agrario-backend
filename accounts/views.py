@@ -16,10 +16,12 @@ from django.utils.http import urlsafe_base64_decode
 from django.core.mail import send_mail
 from django.contrib.auth.tokens import default_token_generator
 from django.contrib.auth import authenticate
-
-from .models import MarketUser, InviteLink, Landowner, ProjectDeveloper
+import stripe
+from .models import MarketUser, InviteLink, Landowner, ProjectDeveloper, PaymentTransaction
 from .serializers import UserRegistrationSerializer, UserSerializer
 from offers.models import Parcel, AreaOffer
+from django.http import JsonResponse, HttpResponse
+from django.conf import settings
 
 
 class MarketUserViewSet(viewsets.ModelViewSet):
@@ -203,6 +205,7 @@ class RoleDashboardView(APIView):
     """
     permission_classes = [IsAuthenticated]
 
+
     @swagger_auto_schema(
         tags=['Dashboard'],
         operation_summary="Get dashboard",
@@ -212,14 +215,27 @@ class RoleDashboardView(APIView):
             400: "Invalid or missing role",
         },
     )
+
+
     def get(self, request):
-        """
-        Retrieve dashboard data for the authenticated user.
-        """
+
+        # Check if user is authenticated
+        if not request.user.is_authenticated:
+            print("Authentication failed: User not authenticated")
+            return Response({"error": "User not authenticated"}, status=status.HTTP_401_UNAUTHORIZED)
+
         user = request.user
+
+        # Check if the user role is 'landowner'
         if user.role == 'landowner':
-            parcels_count = Parcel.objects.filter(owner=user).count()
-            offers_count = AreaOffer.objects.filter(parcel__owner=user, is_active=True).count()
+            try:
+                parcels_count = Parcel.objects.filter(owner=user).count()
+                offers_count = AreaOffer.objects.filter(parcel__owner=user, is_active=True).count()
+                print(f"Landowner Dashboard - Parcels Owned: {parcels_count}, Active Offers: {offers_count}")
+            except Exception as e:
+                print(f"Error while fetching Landowner data: {e}")
+                return Response({"error": "Failed to retrieve landowner data"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
             return Response({
                 "dashboard_greeting": f"Welcome Landowner {user.username}!",
                 "parcels_owned": parcels_count,
@@ -232,9 +248,16 @@ class RoleDashboardView(APIView):
                 "notifications": "You have 2 new messages."
             })
 
+        # Check if the user role is 'developer'
         if user.role == 'developer':
-            watchlist_count = Parcel.objects.filter(offers__parcel__owner=user).count()
-            auctions_count = AreaOffer.objects.filter(is_active=True).count()
+            try:
+                watchlist_count = Parcel.objects.filter(offers__parcel__owner=user).count()
+                auctions_count = AreaOffer.objects.filter(is_active=True).count()
+                print(f"Developer Dashboard - Watchlist Items: {watchlist_count}, Active Auctions: {auctions_count}")
+            except Exception as e:
+                print(f"Error while fetching Developer data: {e}")
+                return Response({"error": "Failed to retrieve developer data"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
             return Response({
                 "dashboard_greeting": f"Welcome Developer {user.username}!",
                 "watchlist_items": watchlist_count,
@@ -247,4 +270,64 @@ class RoleDashboardView(APIView):
                 "notifications": "You have 1 new bid update."
             })
 
+        # Role not assigned or invalid
+        print("Error: Role not assigned or invalid")
         return Response({"error": "Role not assigned or invalid"}, status=status.HTTP_400_BAD_REQUEST)
+    
+
+
+# stripe
+# Set your Stripe secret key
+stripe.api_key = settings.STRIPE_SECRET_KEY
+
+def stripe_webhook(request):
+    """
+    Handle Stripe webhook events for payment verification.
+    """
+    payload = request.body
+    sig_header = request.META.get('HTTP_STRIPE_SIGNATURE', '')
+    endpoint_secret = settings.STRIPE_ENDPOINT_SECRET
+
+    try:
+        event = stripe.Webhook.construct_event(payload, sig_header, endpoint_secret)
+    except ValueError:
+        return HttpResponse(status=400)  # Invalid payload
+    except stripe.error.SignatureVerificationError:
+        return HttpResponse(status=400)  # Invalid signature
+
+    # Handle the event
+    if event['type'] == 'payment_intent.succeeded':
+        payment_intent = event['data']['object']
+        handle_successful_payment(payment_intent)
+    elif event['type'] == 'payment_intent.payment_failed':
+        payment_intent = event['data']['object']
+        handle_failed_payment(payment_intent)
+
+    return JsonResponse({'status': 'success'})
+
+def handle_successful_payment(payment_intent):
+    """
+    Handle successful payment events.
+    """
+    transaction_id = payment_intent['id']
+    amount_received = payment_intent['amount_received'] / 100  # Convert cents to dollars
+    customer_email = payment_intent['charges']['data'][0]['billing_details']['email']
+
+    # Create or update the payment transaction
+    PaymentTransaction.objects.update_or_create(
+        transaction_id=transaction_id,
+        defaults={
+            'status': 'completed',
+            'amount': amount_received,
+            'email': customer_email,
+        }
+    )
+
+def handle_failed_payment(payment_intent):
+    """
+    Handle failed payment events.
+    """
+    transaction_id = payment_intent['id']
+
+    # Update the payment transaction status to failed
+    PaymentTransaction.objects.filter(transaction_id=transaction_id).update(status='failed')
