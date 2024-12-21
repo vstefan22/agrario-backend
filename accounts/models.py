@@ -68,3 +68,20 @@ class InviteLink(models.Model):
 
     def __str__(self):
         return f"Invite by {self.created_by.username} - Active: {self.is_active}"
+
+
+class PaymentTransaction(models.Model):
+    """
+    Model to track payment transactions from Stripe.
+    """
+    transaction_id = models.CharField(max_length=255, unique=True)
+    status = models.CharField(
+        max_length=50, 
+        choices=[('completed', 'Completed'), ('failed', 'Failed')]
+    )
+    amount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    email = models.EmailField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Transaction {self.transaction_id} - {self.status}"

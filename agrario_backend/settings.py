@@ -23,6 +23,11 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = 'django-insecure-g5jyq%m8oeq9rlmu4zw59^wka1#^gm(x839pg@hikive)9d^7%'
 
+# STRIPE
+STRIPE_SECRET_KEY = 'your_stripe_secret_key'  # Replace with actual key
+STRIPE_ENDPOINT_SECRET = 'your_stripe_endpoint_secret'  # Replace with actual key
+
+
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
