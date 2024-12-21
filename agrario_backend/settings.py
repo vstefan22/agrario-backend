@@ -70,6 +70,7 @@ INSTALLED_APPS = [
     'accounts',
     'offers',
     'drf_yasg',
+    # 'django.contrib.gis',
 ]
 
 REST_FRAMEWORK = {

@@ -65,9 +65,53 @@ class ParcelViewSet(viewsets.ModelViewSet):
         report = Report.objects.create(parcel=parcel, calculation_result=result)
 
         return Response({"message": "Calculation completed and saved.", "report_id": report.id}, status=status.HTTP_201_CREATED)
+    
+    @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated])
+    def purchased_items(self, request):
+        """
+        Custom action to return purchased parcels for the authenticated user.
+        """
+        user = request.user
+        purchased_parcels = Parcel.objects.filter(owner=user, status='purchased')
+        serializer = self.get_serializer(purchased_parcels, many=True)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated])
+    def buy(self, request, pk=None):
+        """
+        Custom action for landowners to buy a parcel without Stripe integration.
+        """
+        user = request.user
+        try:
+            parcel = self.get_object()
+            if parcel.status == 'purchased':
+                return Response({"error": "This parcel has already been purchased."}, status=status.HTTP_400_BAD_REQUEST)
+
+            # Simulate payment processing without Stripe
+            # Log the transaction as completed (mocked payment logic)
+            transaction_id = f"mock_txn_{parcel.id}_{user.id}"
+            transaction_details = {
+                "transaction_id": transaction_id,
+                "amount": parcel.area * 10,  # Example pricing logic: $10 per square meter
+                "status": "completed",
+                "user": user.id
+            }
+
+            # Update parcel status to 'purchased'
+            parcel.status = 'purchased'
+            parcel.save()
+
+            return Response({
+                "message": "Parcel purchased successfully.",
+                "parcel_id": parcel.id,
+                "transaction_details": transaction_details
+            }, status=status.HTTP_200_OK)
+        except Parcel.DoesNotExist:
+            return Response({"error": "Parcel not found."}, status=status.HTTP_404_NOT_FOUND)
 
 
-class AreaOfferViewSet(viewsets.ModelViewSet):
+
+class AreaOfferViewSet(viewsets.ModelViewSet): 
     """
     ViewSet for managing AreaOffer instances.
     """
