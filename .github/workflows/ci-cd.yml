@@ -27,7 +27,8 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
         with:
-          fetch-depth: 0 # Fetch the full history to avoid shallow clone issues
+          ref: main
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v4
@@ -76,7 +77,8 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
         with:
-          fetch-depth: 0 # Fetch the full history to avoid shallow clone issues
+          ref: main
+          fetch-depth: 0
 
       - name: Decode Firebase Credentials
         env:
@@ -109,6 +111,15 @@ jobs:
           echo "machine git.heroku.com login ${{ secrets.HEROKU_API_KEY }}" >> ~/.netrc
           chmod 600 ~/.netrc
           heroku auth:whoami
+
+      - name: Initialize Git Repository
+        run: |
+          git config --global user.email "ci@github.com"
+          git config --global user.name "GitHub Actions"
+          git remote set-branches origin main
+          git fetch --all
+          git checkout main
+          git branch --set-upstream-to=origin/main main
 
       - name: Set up Git remote for Heroku
         env:
