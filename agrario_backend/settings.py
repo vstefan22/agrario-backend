@@ -1,7 +1,6 @@
 '''DEFINE SETTINGS FOR DJANGO PROJECT'''
 
-import os
-import json
+
 from pathlib import Path
 import os
 import json
@@ -13,6 +12,7 @@ import dj_database_url
 
 # Load environment variables
 load_dotenv()
+# django_heroku.settings(locals())
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -31,7 +31,8 @@ STRIPE_ENDPOINT_SECRET = 'your_stripe_endpoint_secret'  # Replace with actual ke
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ["127.0.0.1",
+                 'agrario-backend-cc0a3b9c6ae6.herokuapp.com', 'localhost']
 
 # Authentication settings
 AUTH_USER_MODEL = 'accounts.MarketUser'
@@ -63,6 +64,8 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+
+    # G-CLOUD
     'storages',
     'rest_framework',
     'rest_framework.authtoken',
@@ -82,6 +85,7 @@ REST_FRAMEWORK = {
     ],
 }
 
+
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
@@ -100,6 +104,17 @@ EMAIL_USE_TLS = True
 EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER')
 EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD')
 DEFAULT_FROM_EMAIL = 'Agrario'
+
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework.authentication.TokenAuthentication',
+    ],
+    'DEFAULT_PERMISSION_CLASSES': [
+        'rest_framework.permissions.IsAuthenticated',
+    ],
+    'EXCEPTION_HANDLER': 'rest_framework.views.exception_handler',
+}
+
 
 ROOT_URLCONF = 'agrario_backend.urls'
 
@@ -121,24 +136,51 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'agrario_backend.wsgi.application'
 
-# Database configuration
-DATABASES = {
-    'default': dj_database_url.config(default=f"sqlite:///{BASE_DIR}/db.sqlite3")
-}
 
-# Firebase configuration
-FIREBASE_CREDENTIALS = None
-firebase_credentials_path = os.getenv('FIREBASE_CREDENTIALS_JSON_PATH')
-firebase_credentials_base64 = os.getenv('FIREBASE_CREDENTIALS_BASE64')
+# Database
+# https://docs.djangoproject.com/en/5.1/ref/settings/#databases
+
+
+# Database
+if (DEBUG):
+    # POSTGRESQL
+    # DATABASES = {
+    #     'default': {
+    #         'ENGINE': 'django.db.backends.postgresql',
+    #         'NAME': os.getenv("DATABASE_NAME"),
+    #         'USER': os.getenv("DATABASE_USER"),
+    #         'PASSWORD': os.getenv("DATABASE_PASSWORD"),
+    #         'HOST': os.getenv("DATABASE_HOST"),
+    #         'PORT': os.getenv("DATABASE_PORT"),
+    #     }
+    # }
+
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
+    }
+else:
+    DATABASES = {
+        'default': dj_database_url.config()
+    }
+
+AUTH_USER_MODEL = 'accounts.MarketUser'
+firebase_credentials_path = os.getenv("FIREBASE_CREDENTIALS_JSON_PATH")
+firebase_credentials_base64 = os.getenv("FIREBASE_CREDENTIALS_BASE64")
+
 
 try:
     if firebase_credentials_path and os.path.exists(firebase_credentials_path):
         with open(firebase_credentials_path, 'r') as f:
             FIREBASE_CREDENTIALS = json.load(f)
     elif firebase_credentials_base64:
-        FIREBASE_CREDENTIALS = json.loads(base64.b64decode(firebase_credentials_base64).decode('utf-8'))
+        FIREBASE_CREDENTIALS = json.loads(base64.b64decode(
+            firebase_credentials_base64).decode('utf-8'))
 except Exception as e:
     logging.error(f"Error loading Firebase credentials: {e}")
+
 
 # Google Cloud configuration
 GS_CREDENTIALS = None
@@ -150,8 +192,10 @@ try:
         with open(google_credentials_path, 'r') as f:
             google_credentials_info = json.load(f)
     elif google_credentials_base64:
-        google_credentials_info = json.loads(base64.b64decode(google_credentials_base64).decode('utf-8'))
-    GS_CREDENTIALS = service_account.Credentials.from_service_account_info(google_credentials_info)
+        google_credentials_info = json.loads(
+            base64.b64decode(google_credentials_base64).decode('utf-8'))
+    GS_CREDENTIALS = service_account.Credentials.from_service_account_info(
+        google_credentials_info)
 except Exception as e:
     logging.error(f"Error loading Google Cloud credentials: {e}")
 
