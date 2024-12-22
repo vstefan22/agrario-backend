@@ -1,0 +1,1 @@
+web: gunicorn agrario_backend.wsgi –log-file -
