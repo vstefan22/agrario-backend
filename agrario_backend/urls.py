@@ -6,6 +6,7 @@ API endpoints for accounts, offers, and Swagger/Redoc documentation.
 """
 
 from django.urls import include, path
+from django.contrib import admin
 from drf_yasg import openapi
 from drf_yasg.views import get_schema_view
 from rest_framework import permissions
@@ -29,6 +30,7 @@ SchemaView = get_schema_view(
 
 # URL patterns
 urlpatterns = [
+    path("admin/", admin.site.urls),
     path("api/accounts/", include("accounts.urls")),
     path("api/offers/", include("offers.urls")),
     path(
@@ -36,5 +38,6 @@ urlpatterns = [
         SchemaView.with_ui("swagger", cache_timeout=0),
         name="schema-swagger-ui",
     ),
-    path("redoc/", SchemaView.with_ui("redoc", cache_timeout=0), name="schema-redoc"),
+    path("redoc/", SchemaView.with_ui("redoc",
+         cache_timeout=0), name="schema-redoc"),
 ]
