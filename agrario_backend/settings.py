@@ -3,17 +3,6 @@ This file contains configuration for the project, including
 installed apps, middleware, database connections, and third-party integrations.
 """
 
-<<<<<<< HEAD
-
-from pathlib import Path
-import os
-import json
-import base64
-import logging
-from dotenv import load_dotenv
-from google.oauth2 import service_account
-import dj_database_url
-=======
 import base64
 import json
 import logging
@@ -24,7 +13,6 @@ import dj_database_url
 from dotenv import load_dotenv
 from google.oauth2 import service_account
 import logging
->>>>>>> origin/mgacic
 
 # Load environment variables
 load_dotenv()
@@ -82,24 +70,6 @@ INSTALLED_APPS = [
     # DRF
     'rest_framework',
     'corsheaders',
-<<<<<<< HEAD
-    'accounts',
-    'offers',
-    'drf_yasg',
-    # 'django.contrib.gis',
-]
-
-REST_FRAMEWORK = {
-    'DEFAULT_AUTHENTICATION_CLASSES': [
-        'rest_framework.authentication.TokenAuthentication',
-    ],
-    'DEFAULT_PERMISSION_CLASSES': [
-        'rest_framework.permissions.IsAuthenticated',
-    ],
-}
-
-
-=======
     'rest_framework.authtoken',
     'drf_yasg',
 
@@ -108,7 +78,6 @@ REST_FRAMEWORK = {
     'offers',
 ]
 
->>>>>>> origin/mgacic
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
@@ -120,17 +89,6 @@ MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",
 ]
 
-<<<<<<< HEAD
-EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-EMAIL_HOST = 'smtp.gmail.com'
-EMAIL_PORT = 587
-EMAIL_USE_TLS = True
-EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER')
-EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD')
-DEFAULT_FROM_EMAIL = 'Agrario'
-
-=======
->>>>>>> origin/mgacic
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'rest_framework.authentication.TokenAuthentication',
@@ -141,13 +99,8 @@ REST_FRAMEWORK = {
     'EXCEPTION_HANDLER': 'rest_framework.views.exception_handler',
 }
 
-<<<<<<< HEAD
-
-ROOT_URLCONF = 'agrario_backend.urls'
-=======
 # URLs and templates
 ROOT_URLCONF = "agrario_backend.urls"
->>>>>>> origin/mgacic
 
 TEMPLATES = [
     {
@@ -165,78 +118,11 @@ TEMPLATES = [
     },
 ]
 
-<<<<<<< HEAD
-WSGI_APPLICATION = 'agrario_backend.wsgi.application'
-
-=======
 WSGI_APPLICATION = "agrario_backend.wsgi.application"
->>>>>>> origin/mgacic
 
 # Database
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
 
-<<<<<<< HEAD
-
-# Database
-if (DEBUG):
-    # POSTGRESQL
-    # DATABASES = {
-    #     'default': {
-    #         'ENGINE': 'django.db.backends.postgresql',
-    #         'NAME': os.getenv("DATABASE_NAME"),
-    #         'USER': os.getenv("DATABASE_USER"),
-    #         'PASSWORD': os.getenv("DATABASE_PASSWORD"),
-    #         'HOST': os.getenv("DATABASE_HOST"),
-    #         'PORT': os.getenv("DATABASE_PORT"),
-    #     }
-    # }
-
-    DATABASES = {
-        'default': {
-            'ENGINE': 'django.db.backends.sqlite3',
-            'NAME': BASE_DIR / 'db.sqlite3',
-        }
-    }
-else:
-    DATABASES = {
-        'default': dj_database_url.config()
-    }
-
-AUTH_USER_MODEL = 'accounts.MarketUser'
-firebase_credentials_path = os.getenv("FIREBASE_CREDENTIALS_JSON_PATH")
-firebase_credentials_base64 = os.getenv("FIREBASE_CREDENTIALS_BASE64")
-
-
-try:
-    if firebase_credentials_path and os.path.exists(firebase_credentials_path):
-        with open(firebase_credentials_path, 'r') as f:
-            FIREBASE_CREDENTIALS = json.load(f)
-    elif firebase_credentials_base64:
-        FIREBASE_CREDENTIALS = json.loads(base64.b64decode(
-            firebase_credentials_base64).decode('utf-8'))
-except Exception as e:
-    logging.error(f"Error loading Firebase credentials: {e}")
-
-
-# Google Cloud configuration
-GS_CREDENTIALS = None
-google_credentials_path = os.getenv('GOOGLE_CREDENTIALS_JSON_PATH')
-google_credentials_base64 = os.getenv('GOOGLE_CREDENTIALS_BASE64')
-
-try:
-    if google_credentials_path and os.path.exists(google_credentials_path):
-        with open(google_credentials_path, 'r') as f:
-            google_credentials_info = json.load(f)
-    elif google_credentials_base64:
-        google_credentials_info = json.loads(
-            base64.b64decode(google_credentials_base64).decode('utf-8'))
-    GS_CREDENTIALS = service_account.Credentials.from_service_account_info(
-        google_credentials_info)
-except Exception as e:
-    logging.error(f"Error loading Google Cloud credentials: {e}")
-
-# Google Cloud settings
-=======
 
 # Database
 if (DEBUG):
@@ -309,7 +195,6 @@ except Exception as e:
     logging.error(f"Error loading Google Cloud credentials: {e}")
     raise
 
->>>>>>> origin/mgacic
 STORAGES = {
     "default": {
         "BACKEND": "storages.backends.gcloud.GoogleCloudStorage",
@@ -356,9 +241,6 @@ USE_I18N = True
 USE_TZ = True
 
 # Default primary key field type
-<<<<<<< HEAD
-DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
-=======
 # https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
@@ -374,4 +256,3 @@ EMAIL_PORT = 587
 EMAIL_USE_TLS = True
 EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER')
 EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD')
->>>>>>> origin/mgacic
