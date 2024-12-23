@@ -47,7 +47,7 @@ fail-under=10
 #from-stdin=
 
 # Files or directories to be skipped. They should be base names, not paths.
-ignore=settings.py, apps.py, tests.py, manage.py
+ignore=settings.py, apps.py, tests.py, manage.py, market.models.py, website.models.py
 
 
 

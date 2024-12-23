@@ -15,9 +15,7 @@ class Report(models.Model):
     usable_area_battery_m2 = models.PositiveIntegerField()
     # General suitability infra
     ## Energy
-    energy_networkprovider = models.ForeignKey(
-        'GridOperator'
-    )
+    energy_networkprovider = models.ForeignKey("GridOperator")
     energy_distance_midhigh_m = models.PositiveIntegerField()
     energy_distance_highhigh_m = models.PositiveIntegerField()
     energy_distance_tower_highest_m = models.PositiveIntegerField()
@@ -40,25 +38,20 @@ class Report(models.Model):
     baugb_area_m2 = models.PositiveIntegerField()
     is_area_in_privilege_area = models.BooleanField()
 
-
-
     class ReportVisibility(models.TextChoices):
-        ADMIN   = 'A'
-        USER    = 'U'
-        PUBLIC  = 'P'
-
+        ADMIN = "A"
+        USER = "U"
+        PUBLIC = "P"
 
     visible_for = models.CharField(
-        max_length=1,
-        choices=ReportVisibility,
-        default=ReportVisibility.USER
+        max_length=1, choices=ReportVisibility, default=ReportVisibility.USER
     )
-
 
     data = models.JSONField()
 
     def __repr__(self) -> str:
         return self.identifier
+
 
 class GridOperator(models.Model):
     name = models.CharField(unique=True)

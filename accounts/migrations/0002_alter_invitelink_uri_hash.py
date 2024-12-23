@@ -6,13 +6,15 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('accounts', '0001_initial'),
+        ("accounts", "0001_initial"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='invitelink',
-            name='uri_hash',
-            field=models.CharField(default='d561c3a5464e4ea7', max_length=16, unique=True),
+            model_name="invitelink",
+            name="uri_hash",
+            field=models.CharField(
+                default="d561c3a5464e4ea7", max_length=16, unique=True
+            ),
         ),
     ]

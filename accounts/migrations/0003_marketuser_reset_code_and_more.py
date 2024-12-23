@@ -6,23 +6,25 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('accounts', '0002_alter_invitelink_uri_hash'),
+        ("accounts", "0002_alter_invitelink_uri_hash"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='marketuser',
-            name='reset_code',
+            model_name="marketuser",
+            name="reset_code",
             field=models.CharField(blank=True, max_length=6, null=True),
         ),
         migrations.AddField(
-            model_name='marketuser',
-            name='reset_code_created_at',
+            model_name="marketuser",
+            name="reset_code_created_at",
             field=models.DateTimeField(blank=True, null=True),
         ),
         migrations.AlterField(
-            model_name='invitelink',
-            name='uri_hash',
-            field=models.CharField(default='a26018c603a143e4', max_length=16, unique=True),
+            model_name="invitelink",
+            name="uri_hash",
+            field=models.CharField(
+                default="a26018c603a143e4", max_length=16, unique=True
+            ),
         ),
     ]
