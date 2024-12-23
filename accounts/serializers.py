@@ -27,7 +27,8 @@ class UserSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = MarketUser
-        fields = ['id', 'username', 'first_name', 'last_name', 'email', 'password', 'confirm_password']
+        fields = ['id', 'username', 'first_name', 'last_name', 'email', 'phone_number', 'address', 'role', 'is_email_confirmed', 'password', 'confirm_password']
+        read_only_fields = ['id', 'is_email_confirmed', 'role']
 
     def validate(self, attrs):
         """

@@ -21,6 +21,8 @@ class MarketUser(AbstractUser):
     address = models.CharField(max_length=255, null=True, blank=True)
     is_email_confirmed = models.BooleanField(default=False)
     role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='landowner')
+    reset_code = models.CharField(max_length=6, null=True, blank=True)
+    reset_code_created_at = models.DateTimeField(null=True, blank=True)
 
     USERNAME_FIELD = 'email'
     REQUIRED_FIELDS = ['username']

@@ -6,7 +6,7 @@ Defines routes for user management, authentication, and role-specific dashboards
 
 from django.urls import path
 from rest_framework.routers import DefaultRouter
-from .views import MarketUserViewSet, ConfirmEmailView, LoginView, RoleDashboardView, stripe_webhook
+from .views import MarketUserViewSet, ConfirmEmailView, LoginView, RoleDashboardView, stripe_webhook, MarketUserProfileView, PasswordResetConfirmView,PasswordResetRequestView
 
 # Create a router and register the MarketUser viewset
 router = DefaultRouter()
@@ -18,4 +18,7 @@ urlpatterns = [
     path('login/', LoginView.as_view(), name='login'),
     path('dashboard/', RoleDashboardView.as_view(), name='dashboard'),
     path('webhook/stripe/', stripe_webhook, name='stripe-webhook'),
+    path('profile/', MarketUserProfileView.as_view(), name='profile'),
+    path('password-reset/', PasswordResetRequestView.as_view(), name='password-reset-request'),
+    path('password-reset/confirm/', PasswordResetConfirmView.as_view(), name='password-reset-confirm'),
 ] + router.urls

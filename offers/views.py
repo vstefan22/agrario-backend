@@ -42,6 +42,15 @@ class ParcelViewSet(viewsets.ModelViewSet):
     """
     queryset = Parcel.objects.all()
     serializer_class = ParcelSerializer
+    
+    @action(detail=True, methods=['get'], permission_classes=[IsAuthenticated])
+    def details(self, request, pk=None):
+        try:
+            parcel = self.get_object()
+            serializer = self.get_serializer(parcel)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        except Parcel.DoesNotExist:
+            return Response({"error": "Parcel not found."}, status=status.HTTP_404_NOT_FOUND)
 
     @action(detail=False, methods=['post'], permission_classes=[IsAuthenticated])
     def calculate_and_save(self, request):
@@ -108,7 +117,6 @@ class ParcelViewSet(viewsets.ModelViewSet):
             }, status=status.HTTP_200_OK)
         except Parcel.DoesNotExist:
             return Response({"error": "Parcel not found."}, status=status.HTTP_404_NOT_FOUND)
-
 
 
 class AreaOfferViewSet(viewsets.ModelViewSet): 

@@ -14,6 +14,9 @@ from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
 from django.utils.http import urlsafe_base64_decode
 from django.core.mail import send_mail
+from django.utils.crypto import get_random_string
+from django.contrib.auth.hashers import make_password
+from django.utils.timezone import now, timedelta
 from django.contrib.auth.tokens import default_token_generator
 from django.contrib.auth import authenticate
 import stripe
@@ -331,3 +334,92 @@ def handle_failed_payment(payment_intent):
 
     # Update the payment transaction status to failed
     PaymentTransaction.objects.filter(transaction_id=transaction_id).update(status='failed')
+
+class MarketUserProfileView(APIView):
+    """
+    View to retrieve or update the profile of the authenticated user.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        """
+        Retrieve the profile of the authenticated user.
+        """
+        user_serializer = UserSerializer(request.user)
+        return Response(user_serializer.data, status=status.HTTP_200_OK)
+
+    def patch(self, request):
+        """
+        Update the profile of the authenticated user.
+        """
+        user = request.user
+        serializer = UserSerializer(user, data=request.data, partial=True, context={'request': request})
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+class PasswordResetRequestView(APIView):
+    """
+    Handle password reset requests for authenticated users.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        """
+        Generate a reset code and send it to the authenticated user's email.
+        """
+        user = request.user
+        reset_code = get_random_string(6, allowed_chars='0123456789')
+        user.reset_code = reset_code
+        user.reset_code_created_at = now()
+        user.save()
+
+        # Send email with the reset code
+        send_mail(
+            subject="Password Reset Code",
+            message=f"Your password reset code is: {reset_code}",
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[user.email],
+        )
+        return Response({"message": "Reset code sent successfully."}, status=status.HTTP_200_OK)
+
+    def get(self, request):
+        """
+        Return the reset code for the authenticated user if it exists.
+        """
+        user = request.user
+
+        if not user.reset_code or now() - user.reset_code_created_at > timedelta(minutes=30):
+            return Response({"error": "Reset code does not exist or has expired."}, status=status.HTTP_404_NOT_FOUND)
+
+        return Response({"reset_code": user.reset_code}, status=status.HTTP_200_OK)
+    
+class PasswordResetConfirmView(APIView):
+    """
+    Handle password reset confirmation for authenticated users.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        """
+        Change the password for the authenticated user.
+        """
+        user = request.user
+        code = request.data.get('code')
+        new_password = request.data.get('password')
+
+        if not code or not new_password:
+            return Response({"error": "Code and password are required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        if user.reset_code != code:
+            return Response({"error": "Invalid reset code."}, status=status.HTTP_400_BAD_REQUEST)
+        if now() - user.reset_code_created_at > timedelta(minutes=30):
+            return Response({"error": "Reset code has expired."}, status=status.HTTP_400_BAD_REQUEST)
+
+        user.password = make_password(new_password)
+        user.reset_code = None  
+        user.reset_code_created_at = None
+        user.save()
+
+        return Response({"message": "Password reset successfully."}, status=status.HTTP_200_OK)
