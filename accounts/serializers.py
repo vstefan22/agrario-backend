@@ -11,11 +11,14 @@ from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_encode
 from django.utils.translation import gettext_lazy as _
 from rest_framework import serializers
+from datetime import timedelta
+from django.utils.timezone import now
 
 from offers.models import AreaOffer, Parcel
 from offers.serializers import AreaOfferSerializer, ParcelSerializer
+from subscriptions.models import ProjectDeveloperSubscriptionDiscount
 
-from .models import Landowner, MarketUser, ProjectDeveloper
+from .models import Landowner, MarketUser, ProjectDeveloper, InviteLink
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -96,32 +99,73 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
         model = MarketUser
         fields = ["username", "email", "password", "invite_code", "role"]
 
+    def validate(self, data):
+        """
+        Validate the invite_code if provided.
+        """
+        invite_code = data.get("invite_code", None)
+
+        if invite_code:
+            try:
+                invite_link = InviteLink.objects.get(uri_hash=invite_code, is_active=True)
+                data["referring_user"] = invite_link.created_by
+            except InviteLink.DoesNotExist:
+                raise serializers.ValidationError({"invite_code": "Invalid invite link."})
+
+        return data
+
     def create(self, validated_data):
         """
         Create a new MarketUser during registration.
         """
-        validated_data.pop("invite_code", None)
+        invite_code = validated_data.pop("invite_code", None)
         role = validated_data.pop("role", "landowner")
+
         user = MarketUser.objects.create_user(
             username=validated_data["username"],
             email=validated_data["email"],
             password=validated_data["password"],
             role=role,
         )
+
+        if invite_code:
+            user._invite_code = invite_code
+
         return user
 
-    def send_confirmation_email(self, user):
+    def _apply_discount_to_referring_user(self, user):
         """
-        Generate and send an email confirmation link.
+        Apply a discount to the referring user.
+        """
+        try:
+            ProjectDeveloperSubscriptionDiscount.objects.create(
+                discount_for_user=user,
+                valid_from=now().date(),
+                valid_to=(now() + timedelta(days=30)).date(),
+                amount_percent=10,
+            )
+        except Exception as e:
+            raise serializers.ValidationError(
+                {"error": f"Failed to apply discount: {str(e)}"}
+            )
+
+    def send_confirmation_email(self, user, invite_code=None):
+        """
+        Generate and send an email confirmation link with an optional invite code.
         """
         token = default_token_generator.make_token(user)
         uid = urlsafe_base64_encode(force_bytes(user.pk))
+        
         confirmation_link = reverse(
             "confirm-email", kwargs={"uidb64": uid, "token": token}
         )
+        
+        if invite_code:
+            confirmation_link += f"?invite_code={invite_code}"
+        
         send_mail(
             subject="Confirm Your Email Address",
-            message = (
+            message=(
                 f"Hi {user.username},\n\n"
                 f"Click the link below to confirm your email:\n"
                 f"http://localhost:8000{confirmation_link}"
@@ -129,7 +173,6 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
             from_email="noreply@example.com",
             recipient_list=[user.email],
         )
-
 
 class LoginSerializer(serializers.Serializer):
     """
