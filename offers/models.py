@@ -149,7 +149,6 @@ class Report(models.Model):
 
     def __str__(self):
         return (
-            f"Report for Parcel ID {
-                self.parcel.id if self.parcel else 'Unknown'} "
+            f"Report for Parcel ID {self.parcel.id if self.parcel else 'Unknown'}"
             f"created at {self.created_at}"
-        )
+            )
