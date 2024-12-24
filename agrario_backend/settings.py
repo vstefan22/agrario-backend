@@ -76,6 +76,7 @@ INSTALLED_APPS = [
     # custom apps
     'accounts',
     'offers',
+    'subscriptions',
 ]
 
 MIDDLEWARE = [
