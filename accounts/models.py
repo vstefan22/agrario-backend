@@ -5,6 +5,7 @@ Defines custom user model and related entities for the accounts application.
 
 import uuid
 
+from django.utils.crypto import get_random_string
 from django.contrib.auth.models import AbstractUser
 from django.db import models
 
@@ -28,12 +29,14 @@ class MarketUser(AbstractUser):
         ("landowner", "Landowner"),
         ("developer", "Project Developer"),
     )
-    identifier = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    identifier = models.UUIDField(
+        primary_key=True, default=uuid.uuid4, editable=False)
     email = models.EmailField(unique=True)
     phone_number = models.CharField(max_length=15, null=True, blank=True)
     address = models.CharField(max_length=255, null=True, blank=True)
     is_email_confirmed = models.BooleanField(default=False)
-    role = models.CharField(max_length=20, choices=ROLE_CHOICES, default="landowner")
+    role = models.CharField(
+        max_length=20, choices=ROLE_CHOICES, default="landowner")
     reset_code = models.CharField(max_length=6, null=True, blank=True)
     reset_code_created_at = models.DateTimeField(null=True, blank=True)
 
@@ -91,9 +94,13 @@ class InviteLink(models.Model):
         updated_at: Timestamp when the link was last updated.
     """
 
+    def generate_unique_uri_hash():
+        return get_random_string(16)
+
     uri_hash = models.CharField(
-        max_length=16, unique=True, default=uuid.uuid4().hex[:16]
+        max_length=16, unique=True, default=generate_unique_uri_hash
     )
+
     created_by = models.ForeignKey(
         MarketUser, on_delete=models.CASCADE, related_name="invites"
     )
@@ -122,7 +129,8 @@ class PaymentTransaction(models.Model):
     status = models.CharField(
         max_length=50, choices=[("completed", "Completed"), ("failed", "Failed")]
     )
-    amount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    amount = models.DecimalField(
+        max_digits=10, decimal_places=2, null=True, blank=True)
     email = models.EmailField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
