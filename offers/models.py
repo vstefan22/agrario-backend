@@ -109,7 +109,8 @@ class AreaOfferConfirmation(models.Model):
     offer = models.OneToOneField(
         AreaOffer, on_delete=models.CASCADE, related_name="confirmation"
     )
-    confirmed_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    confirmed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     confirmed_at = models.DateTimeField(auto_now_add=True)
 
 
@@ -148,6 +149,7 @@ class Report(models.Model):
 
     def __str__(self):
         return (
-            f"Report for Parcel ID {self.parcel.id if self.parcel else 'Unknown'} "
+            f"Report for Parcel ID {
+                self.parcel.id if self.parcel else 'Unknown'} "
             f"created at {self.created_at}"
         )
