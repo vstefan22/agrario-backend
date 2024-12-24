@@ -58,10 +58,15 @@ class MarketUserViewSet(viewsets.ModelViewSet): # pylint: disable=too-many-ances
         """
         Create a new user and send a confirmation email.
         """
+        invite_code = request.data.get("invite_code")
+
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+
         user = serializer.save()
-        serializer.send_confirmation_email(user)
+
+        serializer.send_confirmation_email(user, invite_code=invite_code)
+
         return Response(
             {"message": "User registered successfully"}, status=status.HTTP_201_CREATED
         )
@@ -111,7 +116,32 @@ class MarketUserViewSet(viewsets.ModelViewSet): # pylint: disable=too-many-ances
             },
             status=status.HTTP_200_OK,
         )
+    
+    @action(detail=False, methods=["post"])
+    def handle_invite_link(self, request):
+        """
+        Check for an existing active invite link or create a new one.
+        """
+        user = request.user
+        
+        invite_link = InviteLink.objects.filter(created_by=user, is_active=True).first()
+        
+        if invite_link:
+            invitation_code = invite_link.uri_hash
+        else:
+            invite_link = InviteLink.objects.create(created_by=user)
+            invitation_code = invite_link.uri_hash
 
+        invitation_link = f"http://127.0.0.1:8000/api/accounts/users/?invite_code={invitation_code}"
+
+        return Response(
+            {
+                "invite_code": invitation_code,
+                "invitation_link": invitation_link,
+                "message": "Invite link generated or retrieved successfully.",
+            },
+            status=status.HTTP_200_OK,
+        )
 
 class ConfirmEmailView(APIView):
     """
@@ -151,6 +181,19 @@ class ConfirmEmailView(APIView):
 
             user.is_email_confirmed = True
             user.save()
+
+            invite_code = request.GET.get("invite_code")
+            if invite_code:
+                try:
+                    invite_link = InviteLink.objects.get(uri_hash=invite_code, is_active=True)
+                    invite_link.successful_referrals += 1
+                    invite_link.save()
+                except InviteLink.DoesNotExist:
+                    return Response(
+                        {"error": "Invalid invite code."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
             return Response(
                 {
                     "message": "Your account has been confirmed successfully. You can log in now."
@@ -162,7 +205,6 @@ class ConfirmEmailView(APIView):
             {"error": "Invalid or expired confirmation link."},
             status=status.HTTP_400_BAD_REQUEST,
         )
-
 
 class LoginView(APIView):
     """
