@@ -33,7 +33,19 @@ class ParcelSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Parcel
-        fields = "__all__"
+        fields = [
+            "state_name",
+            "district_name",
+            "municipality_name",
+            "cadastral_area",
+            "cadastral_sector",
+            "plot_number_main",
+            "plot_number_secondary",
+            "land_use",
+            "area_square_meters",
+            "created_by",
+        ]
+        read_only_fields = ["created_by"]
 
 
 class AreaOfferSerializer(serializers.ModelSerializer):
@@ -98,7 +110,7 @@ class AuctionPlacementSerializer(serializers.ModelSerializer):
         Ensure that the price is a positive value.
         """
         if value <= 0:
-            raise serializers.ValidationError("Price must be a positive value.")
+            raise serializers.ValidationError({"error": "Price must be a positive value."})
         return value
 
     def validate_parcel(self, value):
@@ -107,7 +119,7 @@ class AuctionPlacementSerializer(serializers.ModelSerializer):
         """
         if value.owner != self.context["request"].user:
             raise serializers.ValidationError(
-                "You can only create offers for your own parcels."
+                {"error": "You can only create offers for parcels you own."}
             )
         return value
 

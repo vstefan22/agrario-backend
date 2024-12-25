@@ -11,7 +11,8 @@ from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_encode
 from django.utils.translation import gettext_lazy as _
 from rest_framework import serializers
-
+from rest_framework.response import Response
+from rest_framework import status
 from offers.models import AreaOffer, Parcel
 from offers.serializers import AreaOfferSerializer, ParcelSerializer
 
@@ -52,23 +53,21 @@ class UserSerializer(serializers.ModelSerializer):
         Validate that passwords match.
         """
         if attrs.get("password") != attrs.get("confirm_password"):
-            raise serializers.ValidationError({"password": "Passwords must match."})
+            raise serializers.ValidationError({"error": "Passwords must match."})
         return attrs
 
-    def create(self, validated_data):
+    def create(self, request, *args, **kwargs):
         """
-        Create a new MarketUser instance.
+        Create a new user and enforce validation for mandatory fields.
         """
-        validated_data.pop("confirm_password")
-        user = MarketUser.objects.create(
-            username=validated_data["username"],
-            first_name=validated_data["first_name"],
-            last_name=validated_data["last_name"],
-            email=validated_data["email"],
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = serializer.save()
+        serializer.send_confirmation_email(user)
+        return Response(
+            {"message": "User registered successfully."},
+            status=status.HTTP_201_CREATED,
         )
-        user.set_password(validated_data["password"])
-        user.save()
-        return user
 
     def update(self, instance, validated_data):
         """
@@ -84,17 +83,33 @@ class UserSerializer(serializers.ModelSerializer):
 
 class UserRegistrationSerializer(serializers.ModelSerializer):
     """
-    Serializer for user registration.
-
-    Handles user creation during registration and email confirmation.
+    Serializer for user registration with mandatory field validation.
     """
-
     invite_code = serializers.CharField(write_only=True, required=False)
     role = serializers.ChoiceField(choices=MarketUser.ROLE_CHOICES)
 
     class Meta:
         model = MarketUser
-        fields = ["username", "email", "password", "invite_code", "role"]
+        fields = ["username", "email", "password", "invite_code", "role", "phone_number", "address"]
+        extra_kwargs = {
+            "username": {"required": True},
+            "email": {"required": True},
+            "password": {"write_only": True, "required": True},
+        }
+
+    def validate(self, attrs):
+        """
+        Validate that mandatory fields are filled.
+        """
+        mandatory_fields = ["username", "email", "password"]
+        if attrs.get("role") == "landowner":
+            mandatory_fields.extend(["phone_number", "address"])
+
+        for field in mandatory_fields:
+            if not attrs.get(field):
+                raise serializers.ValidationError({"error": f"{field} is required."})
+
+        return attrs
 
     def create(self, validated_data):
         """
@@ -107,26 +122,26 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
             email=validated_data["email"],
             password=validated_data["password"],
             role=role,
+            phone_number=validated_data.get("phone_number"),
+            address=validated_data.get("address"),
         )
         return user
 
     def send_confirmation_email(self, user):
         """
-        Generate and send an email confirmation link.
+        Generate and send an email confirmation link to the user.
         """
+        from django.conf import settings
+        from django.urls import reverse
+
         token = default_token_generator.make_token(user)
         uid = urlsafe_base64_encode(force_bytes(user.pk))
-        confirmation_link = reverse(
-            "confirm-email", kwargs={"uidb64": uid, "token": token}
-        )
+        confirmation_link = f"{settings.BACKEND_URL}{reverse('confirm-email', kwargs={'uidb64': uid, 'token': token})}"
+
         send_mail(
             subject="Confirm Your Email Address",
-            message = (
-                f"Hi {user.username},\n\n"
-                f"Click the link below to confirm your email:\n"
-                f"http://localhost:8000{confirmation_link}"
-            ),
-            from_email="noreply@example.com",
+            message=f"Hi {user.username},\n\nClick the link below to confirm your email:\n{confirmation_link}",
+            from_email=settings.EMAIL_HOST_USER,
             recipient_list=[user.email],
         )
 
@@ -151,14 +166,14 @@ class LoginSerializer(serializers.Serializer):
         try:
             user = MarketUser.objects.get(email=email)
         except MarketUser.DoesNotExist as exc:
-            raise serializers.ValidationError(_("Invalid email or password.")) from exc
+            raise serializers.ValidationError({"error": "Invalid email or password."}) from exc
 
         if not user.check_password(password):
-            raise serializers.ValidationError(_("Invalid email or password."))
+            raise serializers.ValidationError({"error": "Invalid email or password."})
 
         if not user.is_email_confirmed:
             raise serializers.ValidationError(
-                _("Please confirm your email before logging in.")
+                {"error": "Please confirm your email before logging in."}
             )
 
         attrs["user"] = user

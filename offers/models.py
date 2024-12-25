@@ -5,7 +5,7 @@ Defines models for Landuse, Parcel, AreaOffer, and related entities.
 
 from django.conf import settings
 from django.db import models
-
+# from django.contrib.gis.db import models as gis_models
 
 class Landuse(models.Model):
     """
@@ -24,33 +24,34 @@ class Landuse(models.Model):
 
 
 class Parcel(models.Model):
-    """
-    Model representing a parcel of land.
+    """Defines the geometry of areas of land that landowners want to put on the marketplace."""
 
-    Attributes:
-        owner: The user who owns the parcel.
-        landuse: The land use category for the parcel.
-        area: The size of the parcel in square meters.
-        coordinates: Geo-coordinates or additional spatial data.
-        status: The current status of the parcel (e.g., draft, active).
-        created_at: The timestamp when the parcel was created.
-    """
+    # geom = gis_models.PolygonField()
 
-    owner = models.ForeignKey(
-        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="parcels"
+    # Attributes imported from cadastre / government sources
+    state_name = models.CharField(max_length=64)
+    district_name = models.CharField(max_length=64)
+    municipality_name = models.CharField(max_length=64)
+    cadastral_area = models.CharField(max_length=64)
+    cadastral_sector = models.CharField(max_length=64)
+    plot_number_main = models.CharField(max_length=8, blank=False, null=True)
+    plot_number_secondary = models.CharField(max_length=8, blank=False, null=False)
+    land_use = models.CharField(max_length=255)
+
+    area_square_meters = models.DecimalField(max_digits=12, decimal_places=2)  # Explicit max_digits
+
+    appear_in_offer = models.ForeignKey(
+        "AreaOffer", related_name="parcels", on_delete=models.SET_NULL, null=True
     )
-    landuse = models.CharField(max_length=100, blank=True, null=True)
-    area = models.FloatField()  # Area in square meters
-    coordinates = models.JSONField()  # Additional geo-coordinates if needed
-    status = models.CharField(
-        max_length=20,
-        choices=[("draft", "Draft"), ("active", "Active")],
-        default="draft",
+
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="created_parcels"
     )
+
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        return f"Parcel owned by {self.owner} ({self.area} sqm)"
+        return f"Parcel in {self.state_name}, {self.district_name}"
 
 
 class AreaOffer(models.Model):
