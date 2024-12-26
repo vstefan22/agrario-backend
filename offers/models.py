@@ -5,7 +5,6 @@ Defines models for Landuse, Parcel, AreaOffer, and related entities.
 
 from django.conf import settings
 from django.db import models
-# from django.contrib.gis.db import models as gis_models
 
 class Landuse(models.Model):
     """
@@ -24,30 +23,40 @@ class Landuse(models.Model):
 
 
 class Parcel(models.Model):
-    """Defines the geometry of areas of land that landowners want to put on the marketplace."""
+    """
+    Defines the geometry of areas of land that landowners want to put on the marketplace.
 
-    # geom = gis_models.PolygonField()
+    Attributes:
+        state_name: Name of the state where the parcel is located.
+        district_name: Name of the district where the parcel is located.
+        municipality_name: Name of the municipality.
+        cadastral_area: Cadastral area of the parcel.
+        cadastral_sector: Cadastral sector of the parcel.
+        plot_number_main: Main plot number.
+        plot_number_secondary: Secondary plot number.
+        land_use: Description of land usage.
+        area_square_meters: Area of the parcel in square meters.
+        appear_in_offer: Foreign key linking to an AreaOffer.
+        created_by: User who created the parcel.
+        created_at: Timestamp when the parcel was created.
+    """
 
-    # Attributes imported from cadastre / government sources
     state_name = models.CharField(max_length=64)
     district_name = models.CharField(max_length=64)
     municipality_name = models.CharField(max_length=64)
     cadastral_area = models.CharField(max_length=64)
     cadastral_sector = models.CharField(max_length=64)
-    plot_number_main = models.CharField(max_length=8, blank=False, null=True)
-    plot_number_secondary = models.CharField(max_length=8, blank=False, null=False)
+    plot_number_main = models.CharField(max_length=8, null=True)
+    plot_number_secondary = models.CharField(max_length=8)
     land_use = models.CharField(max_length=255)
-
-    area_square_meters = models.DecimalField(max_digits=12, decimal_places=2)  # Explicit max_digits
+    area_square_meters = models.DecimalField(max_digits=12, decimal_places=2)
 
     appear_in_offer = models.ForeignKey(
         "AreaOffer", related_name="parcels", on_delete=models.SET_NULL, null=True
     )
-
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="created_parcels"
     )
-
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
@@ -144,11 +153,9 @@ class Report(models.Model):
     parcel = models.ForeignKey(
         Parcel, on_delete=models.CASCADE, related_name="reports", null=True, blank=True
     )
-    calculation_result = models.JSONField()  # Store calculation output as JSON
+    calculation_result = models.JSONField()
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        return (
-            f"Report for Parcel ID {self.parcel.id if self.parcel else 'Unknown'} "
-            f"created at {self.created_at}"
-        )
+        parcel_id = self.parcel.id if self.parcel else "Unknown"
+        return f"Report for Parcel ID {parcel_id} created at {self.created_at}"

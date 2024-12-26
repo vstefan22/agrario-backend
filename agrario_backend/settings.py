@@ -175,7 +175,8 @@ FIREBASE_CONFIG = firebase_config
 # GOOGLE CLOUD
 google_credentials_path = os.getenv("GOOGLE_CREDENTIALS_JSON_PATH")
 google_credentials_base64 = os.getenv("GOOGLE_CREDENTIALS_BASE64")
-
+GOOGLE_APPLICATION_CREDENTIALS = os.getenv("GOOGLE_CREDENTIALS_JSON_PATH")
+G_CLOUD_BUCKET_NAME_STATIC=os.getenv("G_CLOUD_BUCKET_NAME_STATIC")
 try:
     if google_credentials_path and os.path.exists(google_credentials_path):
         # Use the credentials file if it exists
@@ -246,10 +247,6 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
-
-
-STATIC_URL = '/static/'
-STATIC_ROOT = BASE_DIR / 'staticfiles'
 
 
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
