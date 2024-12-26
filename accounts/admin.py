@@ -1,14 +1,18 @@
-"""Admin configuration for the accounts application.
-
-This module registers models related to the accounts application
-with the Django admin site.
-"""
-
 from django.contrib import admin
+from .models import MarketUser, Landowner, ProjectDeveloper
 
-from .models import Landowner, MarketUser, ProjectDeveloper
+@admin.register(MarketUser)
+class MarketUserAdmin(admin.ModelAdmin):
+    list_display = ('username', 'email', 'role', 'is_email_confirmed')
+    search_fields = ('username', 'email')
+    list_filter = ('role', 'is_email_confirmed')
 
-# Register models to be managed through the Django admin interface
-admin.site.register(MarketUser)
-admin.site.register(Landowner)
-admin.site.register(ProjectDeveloper)
+@admin.register(Landowner)
+class LandownerAdmin(admin.ModelAdmin):
+    list_display = ('username', 'email', 'position')
+    search_fields = ('username', 'email', 'position')
+
+@admin.register(ProjectDeveloper)
+class ProjectDeveloperAdmin(admin.ModelAdmin):
+    list_display = ('username', 'email', 'company_name', 'company_website')
+    search_fields = ('username', 'email', 'company_name')
