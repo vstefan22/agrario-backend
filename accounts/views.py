@@ -338,19 +338,19 @@ class RoleDashboardView(APIView):
 
     permission_classes = [AllowAny]
 
-    def get_tutorial_links(self):
+    def get_tutorial_links(self, role):
         """
-        Retrieves public links to tutorial videos from the Google Cloud Storage bucket.
-
-        Returns:
-            list: A list of public URLs for tutorial files.
+        Retrieves public links to tutorial videos based on the user's role.
         """
         try:
             storage_client = storage.Client.from_service_account_json(settings.GOOGLE_APPLICATION_CREDENTIALS)
             bucket = storage_client.bucket(settings.G_CLOUD_BUCKET_NAME_STATIC)
-            logger.info(f"Accessing bucket: {settings.G_CLOUD_BUCKET_NAME_STATIC}")
 
-            blobs = bucket.list_blobs(prefix="tutorials/")
+            # Use the configurable prefix
+            prefix = settings.TUTORIAL_LINK_PREFIX.format(role=role)
+            logger.info(f"Fetching files from bucket with prefix: {prefix}")
+
+            blobs = bucket.list_blobs(prefix=prefix)
             tutorial_links = []
 
             for blob in blobs:
@@ -358,11 +358,13 @@ class RoleDashboardView(APIView):
                 if not blob.name.endswith("/"):  # Ignore directories
                     tutorial_links.append(blob.public_url)
 
-            logger.info(f"Tutorial links: {tutorial_links}")
+            if not tutorial_links:
+                logger.warning(f"No tutorials found for role: {role}")
             return tutorial_links
         except Exception as e:
-            logger.error(f"Error in get_tutorial_links: {e}")
+            logger.error(f"Error retrieving tutorial links for role '{role}': {e}")
             return []
+
 
     @swagger_auto_schema(
         tags=["Dashboard"],
@@ -421,7 +423,9 @@ class RoleDashboardView(APIView):
 
         token = auth_header.split("Bearer ")[1]
         decoded_token = verify_firebase_token(token)
+        
         if not decoded_token:
+            logger.warning("Failed to decode token or token expired.")
             return Response({"error": "Invalid or expired Firebase token."}, status=status.HTTP_401_UNAUTHORIZED)
 
         email = decoded_token.get("email")
@@ -433,11 +437,15 @@ class RoleDashboardView(APIView):
         if not user.is_active:
             return Response({"error": "User account is inactive."}, status=status.HTTP_403_FORBIDDEN)
 
-        tutorial_links = self.get_tutorial_links()
-        
+        # Fallback to user model's role if not in the token
+        role = decoded_token.get("role") or user.role
+        tutorial_links = self.get_tutorial_links(role)
+        dashboard_greeting = f"Welcome {role or 'User'} {user.username}!"
+
         dashboard_data = {
-            "dashboard_greeting": f"Welcome {user.role.capitalize()} {user.username}!",
+            "dashboard_greeting": dashboard_greeting,
             "tutorial_links": tutorial_links,
+            "role": role,
         }
 
         return Response(dashboard_data, status=status.HTTP_200_OK)
