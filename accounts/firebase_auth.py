@@ -1,11 +1,19 @@
+"""
+Firebase authentication module.
+
+Handles Firebase authentication and user management integration with Django.
+"""
+
+import logging
+
 import firebase_admin
 from firebase_admin import auth, credentials
 from django.conf import settings
 from rest_framework.authentication import BaseAuthentication
 from rest_framework.exceptions import AuthenticationFailed
 from .models import MarketUser
-import logging
 
+# Initialize logging
 logger = logging.getLogger(__name__)
 
 # Initialize Firebase Admin SDK
@@ -16,7 +24,7 @@ if not firebase_admin._apps:
         logger.info("Firebase Admin SDK initialized successfully.")
     except Exception as e:
         logger.error("Failed to initialize Firebase Admin SDK: %s", e)
-        raise
+        raise RuntimeError("Firebase initialization error") from e
 
 def verify_firebase_token(token):
     """
@@ -44,12 +52,17 @@ def create_firebase_user(email, password):
 
     Returns:
         firebase_admin.auth.UserRecord: The created Firebase user.
+
+    Raises:
+        AuthenticationFailed: If user creation fails.
     """
     try:
         return auth.create_user(email=email, password=password)
     except Exception as e:
         logger.error("Failed to create Firebase user: %s", e)
-        raise AuthenticationFailed("Could not create Firebase user.")
+        raise AuthenticationFailed(
+            "Could not create Firebase user."
+        ) from e
 
 class FirebaseAuthentication(BaseAuthentication):
     """
@@ -57,12 +70,25 @@ class FirebaseAuthentication(BaseAuthentication):
     """
 
     def authenticate(self, request):
-        # Extract token from the "Authorization" header
+        """
+        Authenticate the user using Firebase ID token.
+
+        Args:
+            request: The HTTP request object.
+
+        Returns:
+            tuple: Authenticated user and token, or None.
+
+        Raises:
+            AuthenticationFailed: If token is invalid or authentication fails.
+        """
         auth_header = request.headers.get("Authorization")
         if not auth_header:
-            return None  # No authentication header provided
+            return None
         if not auth_header.startswith("Bearer "):
-            raise AuthenticationFailed("Invalid token format. Token must start with 'Bearer '.")
+            raise AuthenticationFailed(
+                "Invalid token format. Token must start with 'Bearer '."
+            )
 
         token = auth_header.split("Bearer ")[1]
         decoded_token = verify_firebase_token(token)
@@ -73,9 +99,13 @@ class FirebaseAuthentication(BaseAuthentication):
         if not email:
             raise AuthenticationFailed("Email not found in Firebase token.")
 
-        # Fetch or create the user
-        user, _ = MarketUser.objects.get_or_create(
-            email=email,
-            defaults={"username": email.split("@")[0]},
-        )
+        try:
+            user, _ = MarketUser.objects.get_or_create(
+                email=email,
+                defaults={"username": email.split("@")[0]},
+            )
+        except Exception as e:
+            logger.error("Error fetching or creating user: %s", e)
+            raise AuthenticationFailed("Failed to authenticate user.") from e
+
         return (user, None)
