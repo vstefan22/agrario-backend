@@ -22,11 +22,6 @@ router.register(r"users", MarketUserViewSet, basename="market-user")
 
 # Define urlpatterns with additional routes
 urlpatterns = [
-    # path(
-    #     "confirm-email/<uidb64>/<token>/",
-    #     ConfirmEmailView.as_view(),
-    #     name="confirm-email",
-    # ),
     path("login/", LoginView.as_view(), name="login"),
     path("dashboard/", RoleDashboardView.as_view(), name="dashboard"),
     path("webhook/stripe/", stripe_webhook, name="stripe-webhook"),
