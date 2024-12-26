@@ -30,6 +30,7 @@ from .serializers import UserRegistrationSerializer, UserSerializer
 from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_encode
 from firebase_admin import auth as firebase_auth
+from google.cloud import storage
 
 logger = logging.getLogger(__name__)
 
@@ -41,11 +42,22 @@ class MarketUserViewSet(viewsets.ModelViewSet):
     serializer_class = UserRegistrationSerializer
 
     def get_permissions(self):
-        # Allow unauthenticated access to the 'confirm_email' action
+        """
+        Custom permissions for create and confirm_email actions.
+        """
         if self.action == "create" or self.action == "confirm_email":
             return [AllowAny()]
         return [IsAuthenticated()]
 
+    @swagger_auto_schema(
+        operation_summary="Create a new user",
+        operation_description="Handles user registration, Firebase user creation, and email confirmation.",
+        request_body=UserRegistrationSerializer,
+        responses={
+            201: openapi.Response("User registered successfully. Please confirm your email."),
+            400: "Bad Request - Validation Error",
+        },
+    )
     def create(self, request, *args, **kwargs):
         """
         Handles user registration, Firebase user creation, and email confirmation.
@@ -88,6 +100,28 @@ class MarketUserViewSet(viewsets.ModelViewSet):
             recipient_list=[user.email],
         )
 
+    @swagger_auto_schema(
+        operation_summary="Confirm email address",
+        operation_description="Confirms the user's email address using a token and UID.",
+        manual_parameters=[
+            openapi.Parameter(
+                "uidb64",
+                openapi.IN_PATH,
+                description="Base64 encoded user ID",
+                type=openapi.TYPE_STRING,
+            ),
+            openapi.Parameter(
+                "token",
+                openapi.IN_PATH,
+                description="Token for email confirmation",
+                type=openapi.TYPE_STRING,
+            ),
+        ],
+        responses={
+            200: openapi.Response("Email confirmed successfully."),
+            400: "Invalid or expired confirmation link.",
+        },
+    )
     @action(
         detail=False,
         methods=["get"],
@@ -138,12 +172,83 @@ class MarketUserViewSet(viewsets.ModelViewSet):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
+
 class LoginView(APIView):
     """
     Handles user login and returns a Firebase token upon successful authentication.
     """
     permission_classes = [AllowAny]
 
+    @swagger_auto_schema(
+        operation_summary="User Login",
+        operation_description=(
+            "Authenticates a user using their email and password. "
+            "If successful, returns a Firebase token and user details."
+        ),
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            properties={
+                "email": openapi.Schema(
+                    type=openapi.TYPE_STRING, 
+                    description="The email address of the user"
+                ),
+                "password": openapi.Schema(
+                    type=openapi.TYPE_STRING, 
+                    description="The password of the user"
+                ),
+            },
+            required=["email", "password"],
+        ),
+        responses={
+            200: openapi.Response(
+                description="Login successful",
+                examples={
+                    "application/json": {
+                        "message": "Login successful",
+                        "user": {
+                            "email": "example@example.com",
+                            "firebase_uid": "12345abcdef",
+                        },
+                        "firebase_token": "eyJhbGciOiJIUzI1NiIsInR..."
+                    }
+                },
+            ),
+            400: openapi.Response(
+                description="Bad Request - Missing or invalid input",
+                examples={
+                    "application/json": {"error": "Email and password are required."}
+                },
+            ),
+            401: openapi.Response(
+                description="Unauthorized - Invalid email or password",
+                examples={
+                    "application/json": {"error": "Invalid email or password."}
+                },
+            ),
+            403: openapi.Response(
+                description="Forbidden - Email not confirmed",
+                examples={
+                    "application/json": {
+                        "error": "Please confirm your email address before logging in."
+                    }
+                },
+            ),
+            404: openapi.Response(
+                description="Not Found - User does not exist",
+                examples={
+                    "application/json": {"error": "User not found in the system."}
+                },
+            ),
+            500: openapi.Response(
+                description="Internal Server Error",
+                examples={
+                    "application/json": {
+                        "error": "Firebase authentication error: An unexpected error occurred."
+                    }
+                },
+            ),
+        },
+    )
     def post(self, request):
         email = request.data.get("email")
         password = request.data.get("password")
@@ -226,8 +331,6 @@ class LoginView(APIView):
         Raises:
             AuthenticationFailed: If the email or password is incorrect.
         """
-        import requests
-
         firebase_api_key = settings.FIREBASE_API_KEY
         url = f"https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key={firebase_api_key}"
         payload = {
@@ -248,108 +351,111 @@ class RoleDashboardView(APIView):
     API view for retrieving role-based dashboard data.
     """
 
-    permission_classes = [AllowAny]  # Explicitly allow unauthenticated access for token verification
+    permission_classes = [AllowAny]
+
+    def get_tutorial_links(self):
+        """
+        Retrieves public links to tutorial videos from the Google Cloud Storage bucket.
+
+        Returns:
+            list: A list of public URLs for tutorial files.
+        """
+        try:
+            storage_client = storage.Client.from_service_account_json(settings.GOOGLE_APPLICATION_CREDENTIALS)
+            bucket = storage_client.bucket(settings.G_CLOUD_BUCKET_NAME_STATIC)
+            logger.info(f"Accessing bucket: {settings.G_CLOUD_BUCKET_NAME_STATIC}")
+
+            blobs = bucket.list_blobs(prefix="tutorials/")
+            tutorial_links = []
+
+            for blob in blobs:
+                logger.info(f"Found blob: {blob.name}")
+                if not blob.name.endswith("/"):  # Ignore directories
+                    tutorial_links.append(blob.public_url)
+
+            logger.info(f"Tutorial links: {tutorial_links}")
+            return tutorial_links
+        except Exception as e:
+            logger.error(f"Error in get_tutorial_links: {e}")
+            return []
 
     @swagger_auto_schema(
         tags=["Dashboard"],
-        operation_summary="Get dashboard",
-        operation_description="Retrieve role-specific dashboard data based on the user's role.",
+        operation_summary="Get Dashboard",
+        operation_description=(
+            "Retrieve role-specific dashboard data along with tutorial links. "
+            "The user's role determines the content of the dashboard. "
+            "Includes a list of tutorial videos hosted on Google Cloud Storage."
+        ),
         responses={
-            200: openapi.Response("Role-specific dashboard data"),
-            400: "Invalid or missing role",
+            200: openapi.Response(
+                description="Role-specific dashboard data.",
+                examples={
+                    "application/json": {
+                        "dashboard_greeting": "Welcome Landowner JohnDoe!",
+                        "tutorial_links": [
+                            "https://storage.googleapis.com/agrario-static/tutorials/tutorial1.mp4",
+                            "https://storage.googleapis.com/agrario-static/tutorials/tutorial2.mp4",
+                        ],
+                    }
+                },
+            ),
+            401: openapi.Response(
+                description="Unauthorized - Invalid or missing authentication token.",
+                examples={
+                    "application/json": {
+                        "error": "Authentication token not provided."
+                    }
+                },
+            ),
+            403: openapi.Response(
+                description="Forbidden - User account inactive.",
+                examples={
+                    "application/json": {
+                        "error": "User account is inactive."
+                    }
+                },
+            ),
+            404: openapi.Response(
+                description="Not Found - User does not exist.",
+                examples={
+                    "application/json": {
+                        "error": "User does not exist."
+                    }
+                },
+            ),
         },
     )
     def get(self, request):
         """
-        Retrieve dashboard data based on the user's role.
+        Retrieve dashboard data based on the user's role and include tutorial links.
         """
-        # Extract token from Authorization header
         auth_header = request.headers.get("Authorization")
         if not auth_header or not auth_header.startswith("Bearer "):
             return Response({"error": "Authentication token not provided."}, status=status.HTTP_401_UNAUTHORIZED)
 
         token = auth_header.split("Bearer ")[1]
-
-        # Verify Firebase token
         decoded_token = verify_firebase_token(token)
         if not decoded_token:
             return Response({"error": "Invalid or expired Firebase token."}, status=status.HTTP_401_UNAUTHORIZED)
 
-        # Check if user exists in the database
         email = decoded_token.get("email")
-        if not email:
-            return Response({"error": "Email not found in token."}, status=status.HTTP_401_UNAUTHORIZED)
-
         try:
             user = MarketUser.objects.get(email=email)
         except MarketUser.DoesNotExist:
             return Response({"error": "User does not exist."}, status=status.HTTP_404_NOT_FOUND)
 
-        # Check if the user is active
         if not user.is_active:
             return Response({"error": "User account is inactive."}, status=status.HTTP_403_FORBIDDEN)
 
-        # Fetch dashboard data based on the user's role
-        if user.role == "landowner":
-            try:
-                # Replace 'owner' with the actual field name from the Parcel model
-                parcels_count = Parcel.objects.filter(created_by=user).count()
-                offers_count = AreaOffer.objects.filter(
-                    parcel__created_by=user, is_active=True
-                ).count()
-            except Exception as e:
-                logger.error(f"Error retrieving landowner data: {e}")
-                return Response(
-                    {"error": "Failed to retrieve landowner data."},
-                    status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                )
+        tutorial_links = self.get_tutorial_links()
+        
+        dashboard_data = {
+            "dashboard_greeting": f"Welcome {user.role.capitalize()} {user.username}!",
+            "tutorial_links": tutorial_links,
+        }
 
-            return Response(
-                {
-                    "dashboard_greeting": f"Welcome Landowner {user.username}!",
-                    "parcels_owned": parcels_count,
-                    "active_offers": offers_count,
-                    "quick_links": [
-                        {"name": "Manage Parcels", "url": "/parcels"},
-                        {"name": "Place Offers", "url": "/offers"},
-                        {"name": "Analysis & Reports", "url": "/analysis"},
-                    ],
-                    "notifications": "You have 2 new messages.",
-                },
-                status=status.HTTP_200_OK,
-            )
-
-        elif user.role == "developer":
-            try:
-                watchlist_count = Parcel.objects.filter(offers__parcel__owner=user).count()
-                auctions_count = AreaOffer.objects.filter(is_active=True).count()
-            except Exception as e:
-                logger.error("Error retrieving developer data: %s", e)
-                return Response(
-                    {"error": "Failed to retrieve developer data."},
-                    status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                )
-
-            return Response(
-                {
-                    "dashboard_greeting": f"Welcome Developer {user.username}!",
-                    "watchlist_items": watchlist_count,
-                    "active_auctions": auctions_count,
-                    "quick_links": [
-                        {"name": "Search Parcels", "url": "/search"},
-                        {"name": "Manage Profile", "url": "/profile"},
-                        {"name": "Subscriptions", "url": "/subscriptions"},
-                    ],
-                    "notifications": "You have 1 new bid update.",
-                },
-                status=status.HTTP_200_OK,
-            )
-
-        # If the user's role is not assigned or invalid
-        return Response(
-            {"error": "Role not assigned or invalid."},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
+        return Response(dashboard_data, status=status.HTTP_200_OK)
 
 stripe.api_key = settings.STRIPE_SECRET_KEY
 
@@ -414,11 +520,38 @@ class MarketUserProfileView(APIView):
 
     permission_classes = [AllowAny]  # Allow access for Firebase token validation
 
+    @swagger_auto_schema(
+        operation_summary="Retrieve User Profile",
+        operation_description="Retrieve the profile of the authenticated user using the Firebase token.",
+        tags=["Profile"],
+        responses={
+            200: openapi.Response(
+                description="User profile retrieved successfully.",
+                examples={
+                    "application/json": {
+                        "id": "8b2e5cf3-2240-4301-af1d-958b17611613",
+                        "username": "john_doe",
+                        "email": "john.doe@example.com",
+                        "role": "landowner",
+                        "phone_number": "+1234567890",
+                        "address": "123 Main Street",
+                    }
+                },
+            ),
+            401: openapi.Response(
+                description="Unauthorized - Invalid or missing authentication token.",
+                examples={"application/json": {"error": "Authentication token not provided."}},
+            ),
+            404: openapi.Response(
+                description="Not Found - User does not exist.",
+                examples={"application/json": {"error": "User does not exist."}},
+            ),
+        },
+    )
     def get(self, request):
         """
         Retrieve the profile of the authenticated user.
         """
-        # Verify Firebase token
         auth_header = request.headers.get("Authorization")
         if not auth_header or not auth_header.startswith("Bearer "):
             return Response({"error": "Authentication token not provided."}, status=status.HTTP_401_UNAUTHORIZED)
@@ -428,7 +561,6 @@ class MarketUserProfileView(APIView):
         if not decoded_token:
             return Response({"error": "Invalid or expired Firebase token."}, status=status.HTTP_401_UNAUTHORIZED)
 
-        # Retrieve user based on email
         email = decoded_token.get("email")
         if not email:
             return Response({"error": "Email not found in token."}, status=status.HTTP_401_UNAUTHORIZED)
@@ -438,15 +570,42 @@ class MarketUserProfileView(APIView):
         except MarketUser.DoesNotExist:
             return Response({"error": "User does not exist."}, status=status.HTTP_404_NOT_FOUND)
 
-        # Serialize user data
         user_serializer = UserSerializer(user)
         return Response(user_serializer.data, status=status.HTTP_200_OK)
 
+    @swagger_auto_schema(
+        operation_summary="Update User Profile",
+        operation_description="Update the profile of the authenticated user using the Firebase token.",
+        tags=["Profile"],
+        request_body=UserSerializer,
+        responses={
+            200: openapi.Response(
+                description="User profile updated successfully.",
+                examples={
+                    "application/json": {
+                        "id": "8b2e5cf3-2240-4301-af1d-958b17611613",
+                        "username": "john_doe_updated",
+                        "email": "john.doe@example.com",
+                        "role": "landowner",
+                        "phone_number": "+1234567890",
+                        "address": "456 Elm Street",
+                    }
+                },
+            ),
+            401: openapi.Response(
+                description="Unauthorized - Invalid or missing authentication token.",
+                examples={"application/json": {"error": "Authentication token not provided."}},
+            ),
+            404: openapi.Response(
+                description="Not Found - User does not exist.",
+                examples={"application/json": {"error": "User does not exist."}},
+            ),
+        },
+    )
     def patch(self, request):
         """
         Update the profile of the authenticated user.
         """
-        # Same Firebase token validation as in the GET method
         auth_header = request.headers.get("Authorization")
         if not auth_header or not auth_header.startswith("Bearer "):
             return Response({"error": "Authentication token not provided."}, status=status.HTTP_401_UNAUTHORIZED)
@@ -462,7 +621,6 @@ class MarketUserProfileView(APIView):
         except MarketUser.DoesNotExist:
             return Response({"error": "User does not exist."}, status=status.HTTP_404_NOT_FOUND)
 
-        # Update user data
         serializer = UserSerializer(user, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         serializer.save()
@@ -476,6 +634,32 @@ class FirebasePasswordResetRequestView(APIView):
 
     permission_classes = [AllowAny]
 
+    @swagger_auto_schema(
+        operation_summary="Request Password Reset",
+        operation_description="Sends a password reset email to the user using Firebase Authentication.",
+        tags=["Password Reset"],
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            properties={
+                "email": openapi.Schema(
+                    type=openapi.TYPE_STRING,
+                    description="The email address of the user requesting a password reset.",
+                    example="john.doe@example.com",
+                ),
+            },
+            required=["email"],
+        ),
+        responses={
+            200: openapi.Response(
+                description="Password reset email sent successfully.",
+                examples={"application/json": {"message": "Password reset email sent successfully."}},
+            ),
+            400: openapi.Response(
+                description="Bad Request - Invalid email address provided.",
+                examples={"application/json": {"error": "Email is required."}},
+            ),
+        },
+    )
     def post(self, request):
         """
         Sends a password reset email to the user using Firebase.
@@ -489,7 +673,7 @@ class FirebasePasswordResetRequestView(APIView):
 
         payload = {
             "requestType": "PASSWORD_RESET",
-            "email": email
+            "email": email,
         }
 
         response = requests.post(url, json=payload)
