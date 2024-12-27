@@ -12,7 +12,7 @@ from pathlib import Path
 import dj_database_url
 from dotenv import load_dotenv
 from google.oauth2 import service_account
-import logging
+
 
 
 # Load environment variables
@@ -37,6 +37,7 @@ STRIPE_SECRET_KEY = os.getenv('STRIPE_SECRET_KEY')
 
 ALLOWED_HOSTS = ["127.0.0.1",
                  'agrario-backend-cc0a3b9c6ae6.herokuapp.com', 'localhost']
+
 
 
 CSRF_TRUSTED_ORIGINS = [FRONTEND_URL, BACKEND_URL]

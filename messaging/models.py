@@ -2,6 +2,10 @@ import uuid
 from django.db import models
 from accounts.models import MarketUser
 
+class Attachment(models.Model):
+    file = models.FileField(upload_to="messages/attachments/")
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
 class Message(models.Model):
     """
     Model representing a message between two MarketUser instances.
@@ -44,6 +48,13 @@ class Message(models.Model):
     created_at = models.DateTimeField(
         auto_now_add=True,
     )
+    read = models.BooleanField(default=False)
+    attachments = models.ManyToManyField(
+        'Attachment',
+        blank=True,
+        related_name='messages'
+    )
+
 
     def __str__(self):
         return f"Message from {self.sender} to {self.recipient} - {self.subject}"

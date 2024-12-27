@@ -14,6 +14,8 @@ from .models import (
     Parcel,
     Report,
 )
+import logging
+logger = logging.getLogger(__name__)
 
 
 class LanduseSerializer(serializers.ModelSerializer):
@@ -34,6 +36,7 @@ class ParcelSerializer(serializers.ModelSerializer):
     class Meta:
         model = Parcel
         fields = [
+            "id",
             "state_name",
             "district_name",
             "municipality_name",
@@ -114,15 +117,23 @@ class AuctionPlacementSerializer(serializers.ModelSerializer):
         return value
 
     def validate_parcel(self, value):
-        """
-        Ensure that the parcel belongs to the current user.
-        """
-        if value.owner != self.context["request"].user:
-            raise serializers.ValidationError(
-                {"error": "You can only create offers for parcels you own."}
-            )
+        request_user = self.context["request"].user
+        if value.created_by != request_user:
+            logger.warning("Parcel validation failed: User %s does not own Parcel %s", request_user.id, value.id)
+            raise serializers.ValidationError("You can only create offers for parcels you own.")
         return value
 
+    def validate_documents(self, value):
+        """
+        Ensure that the documents belong to the current user.
+        """
+        request_user = self.context["request"].user
+        for document in value:
+            if document.created_by != request_user:
+                raise serializers.ValidationError(
+                    {"error": "You can only attach documents that you own."}
+                )
+        return value
 
 class ReportSerializer(serializers.ModelSerializer):
     """
