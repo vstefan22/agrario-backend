@@ -296,6 +296,7 @@ class LoginView(APIView):
                 "user": {
                     "email": user.email,
                     "firebase_uid": user_record.uid,
+                    "db_uid": user.id
                 },
                 "firebase_token": firebase_token,
             },
@@ -653,27 +654,66 @@ class FirebasePasswordResetRequestView(APIView):
             ),
         },
     )
+    # def post(self, request):
+    #     """
+    #     Sends a password reset email to the user using Firebase.
+    #     """
+    #     email = request.data.get("email")
+    #     if not email:
+    #         return Response({"error": "Email is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+    #     firebase_api_key = settings.FIREBASE_API_KEY
+    #     url = f"https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key={firebase_api_key}"
+
+    #     payload = {
+    #         "requestType": "PASSWORD_RESET",
+    #         "email": email,
+    #     }
+
+    #     response = requests.post(url, json=payload)
+    #     if response.status_code == 200:
+    #         return Response({"message": "Password reset email sent successfully."}, status=status.HTTP_200_OK)
+
+    #     return Response(
+    #         {"error": "Failed to send password reset email. Please check the email address."},
+    #         status=status.HTTP_400_BAD_REQUEST,
+    #     )
     def post(self, request):
-        """
-        Sends a password reset email to the user using Firebase.
-        """
         email = request.data.get("email")
+
+        # Validate email input
         if not email:
-            return Response({"error": "Email is required."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"error": "Email is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
-        firebase_api_key = settings.FIREBASE_API_KEY
-        url = f"https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key={firebase_api_key}"
+        try:
+            # Generate password reset link
+            reset_link = firebase_auth.generate_password_reset_link(email)
+            if not reset_link:
+                raise Exception("Failed to generate email action link.")
 
-        payload = {
-            "requestType": "PASSWORD_RESET",
-            "email": email,
-        }
+            # Send the reset link to the user's email
+            send_mail(
+                subject="Password Reset Request",
+                message=f"Click the link below to reset your password:\n{reset_link}",
+                from_email=settings.EMAIL_HOST_USER,
+                recipient_list=[email],
+                fail_silently=False,
+            )
 
-        response = requests.post(url, json=payload)
-        if response.status_code == 200:
-            return Response({"message": "Password reset email sent successfully."}, status=status.HTTP_200_OK)
-
-        return Response(
-            {"error": "Failed to send password reset email. Please check the email address."},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
+            return Response(
+                {"message": "Password reset email has been sent to your email address."},
+                status=status.HTTP_200_OK,
+            )
+        except firebase_auth.UserNotFoundError:
+            return Response(
+                {"error": "Email not found in Firebase system."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        except Exception as e:
+            return Response(
+                {"error": f"An unexpected error occurred: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )

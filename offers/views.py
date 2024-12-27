@@ -35,16 +35,17 @@ class FirebaseIsAuthenticated(BasePermission):
     def has_permission(self, request, view):
         auth_header = request.headers.get("Authorization")
         if not auth_header or not auth_header.startswith("Bearer "):
+            request.error_message = {"error": "Authentication header or Bearer token is missing."}
             return False
 
         token = auth_header.split("Bearer ")[1]
         decoded_token = verify_firebase_token(token)
         if not decoded_token:
+            request.error_message = {"error": "Invalid or expired Firebase token."}
             return False
 
-        # Attach user info to the request object for further use
         request.user_email = decoded_token.get("email")
-        request.user_role = decoded_token.get("role", "user")  # Assume default role
+        request.user_role = decoded_token.get("role", "user")
         return True
 
 
@@ -73,43 +74,54 @@ class ParcelViewSet(viewsets.ModelViewSet):
         # Retrieve the Firebase token from the request headers
         auth_header = self.request.headers.get("Authorization")
         if not auth_header or not auth_header.startswith("Bearer "):
-            raise PermissionDenied(detail="Authentication token is missing or invalid.")
+            return Response(
+                {"error": "Authentication token is missing or invalid."},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
 
         token = auth_header.split("Bearer ")[1]
 
         # Verify the Firebase token
         decoded_token = verify_firebase_token(token)
         if not decoded_token:
-            raise PermissionDenied(detail="Invalid or expired Firebase token.")
+            return Response(
+                {"error": "Invalid or expired Firebase token."},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
 
         # Fetch the Firebase UID and locate the corresponding MarketUser
-        firebase_uid = decoded_token.get("uid")
         email = decoded_token.get("email")
         if not email:
-            raise PermissionDenied(detail="Email not found in Firebase token.")
+            return Response(
+                {"error": "Email not found in Firebase token."},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
 
         try:
             market_user = MarketUser.objects.get(email=email)
         except MarketUser.DoesNotExist:
-            raise PermissionDenied(detail="User associated with this Firebase UID not found.")
+            return Response(
+                {"error": "User associated with this Firebase UID not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
 
         # Save the Parcel instance with the `created_by` field set
         serializer.save(created_by=market_user)
 
-        @action(detail=True, methods=["get"], permission_classes=[FirebaseIsAuthenticated])
-        def details(self, request, pk=None):
-            """
-            Retrieve details of a specific parcel.
-            """
-            try:
-                parcel = self.get_object()
-                serializer = self.get_serializer(parcel)
-                return Response(serializer.data, status=status.HTTP_200_OK)
-            except Parcel.DoesNotExist:
-                return Response(
-                    {"error": "The specified parcel does not exist."},
-                    status=status.HTTP_404_NOT_FOUND,
-                )
+    @action(detail=True, methods=["get"], permission_classes=[FirebaseIsAuthenticated])
+    def details(self, request, pk=None):
+        """
+        Retrieve details of a specific parcel.
+        """
+        try:
+            parcel = self.get_object()
+            serializer = self.get_serializer(parcel)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        except Parcel.DoesNotExist:
+            return Response(
+                {"error": "The specified parcel does not exist."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
 
     @action(detail=False, methods=["post"], permission_classes=[FirebaseIsAuthenticated])
     def calculate_and_save(self, request):
@@ -150,11 +162,40 @@ class ParcelViewSet(viewsets.ModelViewSet):
         return Response(serializer.data, status=status.HTTP_200_OK)
 
     @action(detail=True, methods=["post"], permission_classes=[FirebaseIsAuthenticated])
-    def buy(self, request, _pk=None):
+    def buy(self, request, pk=None):
         """
         Purchase a parcel.
         """
-        user_email = request.user_email
+        auth_header = request.headers.get("Authorization")
+        if not auth_header or not auth_header.startswith("Bearer "):
+            return Response(
+                {"error": "Authentication token is missing or invalid."},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+
+        token = auth_header.split("Bearer ")[1]
+        decoded_token = verify_firebase_token(token)
+        if not decoded_token:
+            return Response(
+                {"error": "Invalid or expired Firebase token."},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+
+        user_email = decoded_token.get("email")
+        if not user_email:
+            return Response(
+                {"error": "Email not found in Firebase token."},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+
+        try:
+            user = MarketUser.objects.get(email=user_email)
+        except MarketUser.DoesNotExist:
+            return Response(
+                {"error": "User does not exist."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
         try:
             parcel = self.get_object()
             if parcel.status == "purchased":
@@ -189,6 +230,15 @@ class ParcelViewSet(viewsets.ModelViewSet):
             )
 
 
+class ParcelOwnershipPermission(IsAuthenticated):
+    """
+    Custom permission to ensure users can only operate on their own parcels.
+    """
+    def has_object_permission(self, request, view, obj):
+        # Ensure the object is a Parcel and check ownership
+        return isinstance(obj, Parcel) and obj.created_by == request.user
+
+
 class AreaOfferViewSet(viewsets.ModelViewSet):
     """
     ViewSet for managing AreaOffer instances.
@@ -196,6 +246,12 @@ class AreaOfferViewSet(viewsets.ModelViewSet):
 
     queryset = AreaOffer.objects.all()
     serializer_class = AreaOfferSerializer
+
+    # def get_permissions(self):
+    #     if self.action == "place_auction":
+    #         return [ParcelOwnershipPermission()]
+    #     return super().get_permissions()
+    permission_classes=[FirebaseIsAuthenticated]
 
     @action(detail=True, methods=["post"], url_path="confirm", permission_classes=[FirebaseIsAuthenticated])
     def confirm_offer(self, request, _pk=None):
@@ -220,23 +276,34 @@ class AreaOfferViewSet(viewsets.ModelViewSet):
             status=status.HTTP_201_CREATED,
         )
 
-    @action(detail=False, methods=["post"], permission_classes=[FirebaseIsAuthenticated])
-    def place_auction(self, request):
+    def create(self, request):
         """
-        Place an auction for an area offer.
+        Allow a landowner to place an auction for their parcel.
         """
-        if request.user_role != "landowner":
-            return Response(
-                {"error": "Only landowners are permitted to place auctions."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
-        serializer = AuctionPlacementSerializer(
-            data=request.data, context={"request": request}
-        )
-        if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            # Validate the parcel ownership
+            parcel_id = request.data.get("parcel")
+            if not parcel_id:
+                return Response({"error": "Parcel ID is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+            try:
+                parcel = Parcel.objects.get(id=parcel_id)
+            except Parcel.DoesNotExist:
+                return Response({"error": "The specified parcel does not exist."}, status=status.HTTP_404_NOT_FOUND)
+
+            if parcel.created_by != request.user:
+                return Response({"error": "You are not allowed to place an auction for this parcel."}, status=status.HTTP_403_FORBIDDEN)
+
+            # Validate and save the offer
+            serializer = self.get_serializer(data=request.data, context={"request": request})
+            if serializer.is_valid():
+                serializer.save()
+                return Response(serializer.data, status=status.HTTP_201_CREATED)
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        except Exception as e:
+            return Response({"error": "An unexpected error occurred."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 
 class AreaOfferDocumentsViewSet(viewsets.ModelViewSet):
