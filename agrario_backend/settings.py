@@ -14,7 +14,6 @@ from dotenv import load_dotenv
 from google.oauth2 import service_account
 
 
-
 # Load environment variables
 load_dotenv()
 # django_heroku.settings(locals())
@@ -33,7 +32,10 @@ SECRET_KEY = os.getenv('SECRET_KEY')
 DEBUG = os.getenv('DEBUG', 'False')
 FRONTEND_URL = os.getenv('FRONTEND_URL')
 BACKEND_URL = os.getenv('BACKEND_URL')
-STRIPE_SECRET_KEY = os.getenv('STRIPE_SECRET_KEY')
+# STRIPE_SECRET_KEY = os.getenv('STRIPE_SECRET_KEY')
+STRIPE_SECRET_KEY = "sk_test_51Qbmc4RnpHijSsKDQROpbHOaU6e24KCuubsUxDQ2cWe50YrWAb1q6mDWcMdT7i8IdT0Sr8F9HaOr0PBjjEDlbsfJ00MHIAXOUR"  # From Stripe dashboard (Test Mode)
+STRIPE_PUBLISHABLE_KEY = "pk_test_51Qbmc4RnpHijSsKDaKN8ljxCHUheC8cdFyxGD7KlsmyVHVqyqS2roS32z8k4GnCu0Hcv01AXzwrEXOahXkXfBqEe00BbdYgoQdy"  # From Stripe dashboard (Test Mode)
+STRIPE_ENDPOINT_SECRET = "whsec_154627c69d9ff877159ef9e1e07f48f151cc1cf2a9ca38e8749512d7c988591a"  # From Stripe Webhooks (Test Mode)
 
 ALLOWED_HOSTS = ["127.0.0.1",
                  'agrario-backend-cc0a3b9c6ae6.herokuapp.com', 'localhost']
@@ -75,10 +77,17 @@ INSTALLED_APPS = [
     'rest_framework.authtoken',
     'drf_yasg',
 
+    'phonenumber_field',
+    'phonenumbers',
+
+    'psycopg2',
+
     # custom apps
     'accounts',
     'offers',
     'messaging',
+    'reports',
+    'payments',
 ]
 
 MIDDLEWARE = [
@@ -127,30 +136,43 @@ WSGI_APPLICATION = "agrario_backend.wsgi.application"
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
 
 
-# Database
-if (DEBUG):
-    # POSTGRESQL
-    # DATABASES = {
-    #     'default': {
-    #         'ENGINE': 'django.db.backends.postgresql',
-    #         'NAME': os.getenv("DATABASE_NAME"),
-    #         'USER': os.getenv("DATABASE_USER"),
-    #         'PASSWORD': os.getenv("DATABASE_PASSWORD"),
-    #         'HOST': os.getenv("DATABASE_HOST"),
-    #         'PORT': os.getenv("DATABASE_PORT"),
-    #     }
-    # }
+# # Database
+# if (DEBUG):
+#     # POSTGRESQL
+#     # DATABASES = {
+#     #     'default': {
+#     #         'ENGINE': 'django.db.backends.postgresql',
+#     #         'NAME': os.getenv("DATABASE_NAME"),
+#     #         'USER': os.getenv("DATABASE_USER"),
+#     #         'PASSWORD': os.getenv("DATABASE_PASSWORD"),
+#     #         'HOST': os.getenv("DATABASE_HOST"),
+#     #         'PORT': os.getenv("DATABASE_PORT"),
+#     #     }
+#     # }
 
-    DATABASES = {
-        'default': {
-            'ENGINE': 'django.db.backends.sqlite3',
-            'NAME': BASE_DIR / 'db.sqlite3',
-        }
+#     DATABASES = {
+#         'default': {
+#             'ENGINE': 'django.db.backends.sqlite3',
+#             'NAME': BASE_DIR / 'db.sqlite3',
+#         }
+#     }
+# else:
+#     DATABASES = {
+#         'default': dj_database_url.config()
+#     }
+
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.contrib.gis.db.backends.postgis',  # Use PostGIS as the database backend
+        'NAME': 'agrario',              # Replace with your PostgreSQL database name
+        'USER': 'postgres',                        # PostgreSQL username
+        'PASSWORD': '1234',                        # PostgreSQL password
+        'HOST': 'localhost',                       # Database host, use 'localhost' if running locally
+        'PORT': '5432',                            # Default PostgreSQL port
     }
-else:
-    DATABASES = {
-        'default': dj_database_url.config()
-    }
+}
+
+GDAL_LIBRARY_PATH = r"C:\Users\merlin\anaconda3\envs\agrario_env\Library\bin\gdal.dll"
 
 AUTH_USER_MODEL = 'accounts.MarketUser'
 # Load Firebase credentials

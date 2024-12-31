@@ -9,6 +9,15 @@ class AttachmentSerializer(serializers.ModelSerializer):
         model = Attachment
         fields = ['id', 'file', 'uploaded_at']
 
+    def validate_file(self, value):
+        max_size = 5 * 1024 * 1024  # 5 MB
+        allowed_types = ['application/pdf', 'image/jpeg', 'image/png']
+        if value.size > max_size:
+            raise serializers.ValidationError("File size must be under 5MB.")
+        if value.content_type not in allowed_types:
+            raise serializers.ValidationError("Unsupported file type.")
+        return value
+
 
 class SenderSerializer(serializers.ModelSerializer):
     """
@@ -57,6 +66,15 @@ class MessageSerializer(serializers.ModelSerializer):
             message.attachments.add(attachment)
 
         return message
+
+    def save(self, **kwargs):
+        """
+        Save the message with the correct thread value.
+        """
+        thread = kwargs.get('thread')
+        if thread:
+            self.validated_data['thread'] = thread
+        return super().save(**self.validated_data)
 
     def validate_recipient(self, value):
         """

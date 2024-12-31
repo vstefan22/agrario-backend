@@ -1,6 +1,8 @@
 import uuid
 from django.db import models
 from accounts.models import MarketUser
+import logging
+logger = logging.getLogger(__name__)
 
 class Attachment(models.Model):
     file = models.FileField(upload_to="messages/attachments/")
@@ -49,12 +51,28 @@ class Message(models.Model):
         auto_now_add=True,
     )
     read = models.BooleanField(default=False)
+    archived = models.BooleanField(default=False)
     attachments = models.ManyToManyField(
         'Attachment',
         blank=True,
         related_name='messages'
     )
 
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['sender', 'recipient', 'thread'],
+                name='unique_thread_per_pair'
+            )
+        ]
+
+
 
     def __str__(self):
         return f"Message from {self.sender} to {self.recipient} - {self.subject}"
+    
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        logger.info(f"Saved message {self.identifier} with thread {self.thread}")
+
