@@ -5,6 +5,7 @@ Handles Firebase authentication and user management integration with Django.
 """
 
 import logging
+logger = logging.getLogger(__name__)
 
 import firebase_admin
 from firebase_admin import auth, credentials
@@ -12,6 +13,7 @@ from django.conf import settings
 from rest_framework.authentication import BaseAuthentication
 from rest_framework.exceptions import AuthenticationFailed
 from .models import MarketUser
+from .utils import get_user_role
 
 # Initialize Firebase Admin SDK
 if not firebase_admin._apps:
@@ -32,8 +34,13 @@ def verify_firebase_token(token):
         dict: The decoded token if valid, None otherwise.
     """
     try:
-        return auth.verify_id_token(token)
+        decoded_token = auth.verify_id_token(token, check_revoked=True)
+        return decoded_token
+    except auth.RevokedIdTokenError:
+        logger.error("Token has been revoked.")
+        return None
     except Exception as e:
+        logger.error(f"Token verification error: {str(e)}")
         return None
 
 def create_firebase_user(email, password):
@@ -52,10 +59,13 @@ def create_firebase_user(email, password):
     """
     try:
         return auth.create_user(email=email, password=password)
+    except auth.EmailAlreadyExistsError:
+        raise AuthenticationFailed({"error": "The email address is already in use."})
+    except auth.InvalidPasswordError:
+        raise AuthenticationFailed({"error": "The password is invalid or too weak."})
     except Exception as e:
-        raise AuthenticationFailed(
-            {"error": "Could not create Firebase user."}
-        ) from e
+        logger.error(f"Firebase user creation error: {str(e)}")
+        raise AuthenticationFailed({"error": "Could not create Firebase user. Please check the details."}) from e
 
 class FirebaseAuthentication(BaseAuthentication):
     """
@@ -64,47 +74,31 @@ class FirebaseAuthentication(BaseAuthentication):
     
 
     def authenticate(self, request):
-        """
-        Authenticate the user using Firebase ID token.
-
-        Args:
-            request: The HTTP request object.
-
-        Returns:
-            tuple: Authenticated user and token, or None.
-
-        Raises:
-            AuthenticationFailed: If token is invalid or authentication fails.
-        """
         auth_header = request.headers.get("Authorization")
-        if not auth_header:
+        if not auth_header or not auth_header.startswith("Bearer "):
             return None
-        if not auth_header.startswith("Bearer "):
-            raise AuthenticationFailed(
-                {"error": "Invalid token format. Token must start with 'Bearer '."}
-            )
-        
+
         token = auth_header.split("Bearer ")[1]
         decoded_token = verify_firebase_token(token)
         if not decoded_token:
-            raise AuthenticationFailed(
-                {"error": "Invalid or expired Firebase token."}
-            )
+            raise AuthenticationFailed({"error": "Invalid or expired Firebase token."})
 
         email = decoded_token.get("email")
         if not email:
-            raise AuthenticationFailed(
-                {"error": "Email not found in Firebase token."}
-            )
+            raise AuthenticationFailed({"error": "Email not found in Firebase token."})
+
+        # Get user role using utility function
+        role = get_user_role(decoded_token, email)
+        if not role:
+            raise AuthenticationFailed({"error": "Role not found for the user."})
 
         try:
             user, _ = MarketUser.objects.get_or_create(
                 email=email,
-                defaults={"username": email.split("@")[0]},
+                defaults={"username": email.split("@")[0], "role": role},
             )
         except Exception as e:
-            raise AuthenticationFailed(
-                {"error": "Failed to authenticate user."}
-            ) from e
+            raise AuthenticationFailed({"error": "Failed to authenticate user."}) from e
 
+        request.user_role = role  # Attach role to the request object
         return (user, None)

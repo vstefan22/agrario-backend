@@ -90,9 +90,21 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = MarketUser
-        fields = ["username", "email", "password", "invite_code", "role", "phone_number", "address"]
+        fields = [
+            "email",
+            "password",
+            "invite_code",
+            "role",
+            "phone_number",
+            "address",
+            "company_name",
+            "company_website",
+            "profile_picture",
+            "zipcode",
+            "city",
+            "street_housenumber",
+        ]
         extra_kwargs = {
-            "username": {"required": True},
             "email": {"required": True},
             "password": {"write_only": True, "required": True},
         }
@@ -101,13 +113,19 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
         """
         Validate that mandatory fields are filled.
         """
-        mandatory_fields = ["username", "email", "password"]
+        mandatory_fields = ["email", "password", "role"]
         if attrs.get("role") == "landowner":
-            mandatory_fields.extend(["phone_number", "address"])
+            mandatory_fields.extend(["phone_number", "address", "zipcode", "city", "street_housenumber"])
+        elif attrs.get("role") == "developer":
+            mandatory_fields.extend(["company_name", "company_website"])
 
         for field in mandatory_fields:
             if not attrs.get(field):
                 raise serializers.ValidationError({"error": f"{field} is required."})
+
+        # Validate password strength
+        if len(attrs["password"]) < 6:
+            raise serializers.ValidationError({"error": "Password must be at least 6 characters long."})
 
         return attrs
 
@@ -118,12 +136,17 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
         validated_data.pop("invite_code", None)
         role = validated_data.pop("role", "landowner")
         user = MarketUser.objects.create_user(
-            username=validated_data["username"],
             email=validated_data["email"],
             password=validated_data["password"],
             role=role,
             phone_number=validated_data.get("phone_number"),
             address=validated_data.get("address"),
+            company_name=validated_data.get("company_name"),
+            company_website=validated_data.get("company_website"),
+            profile_picture=validated_data.get("profile_picture"),
+            zipcode=validated_data.get("zipcode"),
+            city=validated_data.get("city"),
+            street_housenumber=validated_data.get("street_housenumber"),
         )
         return user
 
@@ -140,7 +163,7 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
 
         send_mail(
             subject="Confirm Your Email Address",
-            message=f"Hi {user.username},\n\nClick the link below to confirm your email:\n{confirmation_link}",
+            message=f"Hi {user.first_name},\n\nClick the link below to confirm your email:\n{confirmation_link}",
             from_email=settings.EMAIL_HOST_USER,
             recipient_list=[user.email],
         )
@@ -213,7 +236,50 @@ class LandownerDashboardSerializer(serializers.ModelSerializer):
         """
         offers = AreaOffer.objects.filter(created_by=obj)
         return AreaOfferSerializer(offers, many=True).data
+    
 
+class LandownerProfileSerializer(serializers.ModelSerializer):
+    """
+    Serializer for Landowner-specific profile details.
+    """
+    class Meta:
+        model = Landowner
+        fields = [
+            "id",
+            "profile_picture",
+            "first_name",
+            "last_name",
+            "email",
+            "phone_number",
+            "address",
+            "zipcode",
+            "city",
+            "position",  # Landowner-specific attribute
+            "is_email_confirmed",
+        ]
+        read_only_fields = ["id", "email", "is_email_confirmed"]
+
+class DeveloperProfileSerializer(serializers.ModelSerializer):
+    """
+    Serializer for ProjectDeveloper-specific profile details.
+    """
+    class Meta:
+        model = ProjectDeveloper
+        fields = [
+            "id",
+            "profile_picture",
+            "first_name",
+            "last_name",
+            "email",
+            "phone_number",
+            "address",
+            "zipcode",
+            "city",
+            "company_name",  # Developer-specific attribute
+            "company_website",  # Developer-specific attribute
+            "is_email_confirmed",
+        ]
+        read_only_fields = ["id", "email", "is_email_confirmed"]
 
 class DeveloperDashboardSerializer(serializers.ModelSerializer):
     """

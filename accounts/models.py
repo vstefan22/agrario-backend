@@ -5,9 +5,36 @@ Defines custom user model and related entities for the accounts application.
 
 import uuid
 
+from django.core.validators import MinLengthValidator
 from django.contrib.auth.models import AbstractUser
+from phonenumber_field.modelfields import PhoneNumberField
 from django.db import models
+# from django.contrib.gis.db import models as models2
+from django.contrib.auth.models import BaseUserManager
 
+class MarketUserManager(BaseUserManager):
+    """
+    Custom manager for MarketUser without a username field.
+    """
+    def create_user(self, email, password=None, **extra_fields):
+        if not email:
+            raise ValueError("The Email field must be set")
+        email = self.normalize_email(email)
+        user = self.model(email=email, **extra_fields)
+        user.set_password(password)
+        user.save(using=self._db)
+        return user
+
+    def create_superuser(self, email, password=None, **extra_fields):
+        extra_fields.setdefault('is_staff', True)
+        extra_fields.setdefault('is_superuser', True)
+
+        if extra_fields.get('is_staff') is not True:
+            raise ValueError("Superuser must have is_staff=True.")
+        if extra_fields.get('is_superuser') is not True:
+            raise ValueError("Superuser must have is_superuser=True.")
+
+        return self.create_user(email, password, **extra_fields)
 
 class MarketUser(AbstractUser):
     """
@@ -28,20 +55,35 @@ class MarketUser(AbstractUser):
         ("landowner", "Landowner"),
         ("developer", "Project Developer"),
     )
-    identifier = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    username = None
+    identifier = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False
+    )
     email = models.EmailField(unique=True)
-    phone_number = models.CharField(max_length=15, null=True, blank=True)
+    phone_number = PhoneNumberField(
+        region="DE", max_length=20, blank=True, null=True)
     address = models.CharField(max_length=255, null=True, blank=True)
+    company_name = models.CharField(max_length=255, null=True, blank=True)
+    company_website = models.URLField(null=True, blank=True)
+    profile_picture = models.FileField(upload_to="profile_pictures/", blank=True)
+    city = models.CharField(max_length=50, null=True)
+    street_housenumber = models.CharField(max_length=50, null=True)
+    zipcode = models.CharField(max_length=5)
     is_email_confirmed = models.BooleanField(default=False)
-    role = models.CharField(max_length=20, choices=ROLE_CHOICES, default="landowner")
+    role = models.CharField(
+        max_length=20, choices=ROLE_CHOICES, default="landowner")
     reset_code = models.CharField(max_length=6, null=True, blank=True)
     reset_code_created_at = models.DateTimeField(null=True, blank=True)
 
     USERNAME_FIELD = "email"
-    REQUIRED_FIELDS = ["username"]
+    REQUIRED_FIELDS = ['first_name', 'last_name', 'company_name', 'address', 'zipcode', 'city', 'phone_number']
+    
+    objects = MarketUserManager()
 
     def __str__(self):
-        return f"{self.username} ({self.get_role_display()})"
+        return f"{self.first_name} {self.last_name} ({self.get_role_display()})"
 
     @property
     def id(self):
@@ -53,10 +95,10 @@ class MarketUser(AbstractUser):
         """
         return self.identifier
 
-    class Meta:
-        verbose_name = "Market User"
-        verbose_name_plural = "Market Users"
-
+    def delete(self, *args, **kwargs):
+        if self.file:
+            self.file.delete()
+        super().delete(*args, **kwargs)
 
 class Landowner(MarketUser):
     """
@@ -82,61 +124,42 @@ class ProjectDeveloper(MarketUser):
         company_website: Optional website URL of the company.
     """
 
-    company_name = models.CharField(max_length=255, null=True, blank=True)
-    company_website = models.URLField(null=True, blank=True)
+    interest = models.ForeignKey(
+        to="ProjectDeveloperInterest", on_delete=models.CASCADE
+    )
+
+    states_active = models.ManyToManyField(to="Region")
 
     class Meta:
         verbose_name = "Project Developer"
         verbose_name_plural = "Project Developers"
+        
+class Region(models.Model):
 
+    name = models.CharField(max_length=64)
 
-class InviteLink(models.Model):
-    """
-    Model for managing invitation links.
-
-    Attributes:
-        uri_hash: Unique hash for the invitation link.
-        created_by: User who created the invitation link.
-        successful_referrals: Number of successful referrals using the link.
-        is_active: Boolean indicating if the link is active.
-        created_at: Timestamp when the link was created.
-        updated_at: Timestamp when the link was last updated.
-    """
-
-    uri_hash = models.CharField(
-        max_length=16, unique=True, default=uuid.uuid4().hex[:16]
+    # example 'DE-BW' or see https://en.wikipedia.org/wiki/ISO_3166
+    iso3166 = models.CharField(
+        max_length=5, validators=[MinLengthValidator(5)], null=True, blank=False
     )
-    created_by = models.ForeignKey(
-        MarketUser, on_delete=models.CASCADE, related_name="invites"
-    )
-    successful_referrals = models.PositiveIntegerField(default=0)
-    is_active = models.BooleanField(default=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
 
-    def __str__(self):
-        return f"Invite by {self.created_by.username} - Active: {self.is_active}"
+    # geom = models2.MultiPolygonField()
 
+class ProjectDeveloperInterest(models.Model):
+    """Interest of the project developer"""
 
-class PaymentTransaction(models.Model):
-    """
-    Model to track payment transactions from Stripe.
+    wind = models.BooleanField()
 
-    Attributes:
-        transaction_id: Unique identifier for the transaction.
-        status: Status of the transaction (e.g., completed, failed).
-        amount: Amount of the transaction.
-        email: Email associated with the transaction.
-        created_at: Timestamp when the transaction was created.
-    """
+    ground_mounted_solar = models.BooleanField()
 
-    transaction_id = models.CharField(max_length=255, unique=True)
-    status = models.CharField(
-        max_length=50, choices=[("completed", "Completed"), ("failed", "Failed")]
-    )
-    amount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
-    email = models.EmailField(null=True, blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
+    battery = models.BooleanField()
 
-    def __str__(self):
-        return f"Transaction {self.transaction_id} - {self.status}"
+    heat = models.BooleanField()
+
+    hydrogen = models.BooleanField()
+
+    electromobility = models.BooleanField()
+
+    ecological_upgrading = models.BooleanField()
+
+    other = models.CharField(max_length=50)
