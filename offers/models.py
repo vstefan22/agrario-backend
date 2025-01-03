@@ -5,6 +5,13 @@ Defines models for Landuse, Parcel, AreaOffer, and related entities.
 
 from django.conf import settings
 from django.db import models
+from django.db.models import JSONField
+from django.contrib.gis.db import models as gis_models
+import uuid
+from django.db import models
+from django.utils.translation import gettext_lazy as _
+from accounts.models import Landowner, MarketUser  # Replace with the actual user model
+import random
 
 
 class Landuse(models.Model):
@@ -25,59 +32,104 @@ class Landuse(models.Model):
 
 class Parcel(models.Model):
     """
-    Model representing a parcel of land.
+    Defines the geometry of areas of land that landowners want to put on the marketplace.
 
     Attributes:
-        owner: The user who owns the parcel.
-        landuse: The land use category for the parcel.
-        area: The size of the parcel in square meters.
-        coordinates: Geo-coordinates or additional spatial data.
-        status: The current status of the parcel (e.g., draft, active).
-        created_at: The timestamp when the parcel was created.
+        state_name: Name of the state where the parcel is located.
+        district_name: Name of the district where the parcel is located.
+        municipality_name: Name of the municipality.
+        cadastral_area: Cadastral area of the parcel.
+        cadastral_sector: Cadastral sector of the parcel.
+        plot_number_main: Main plot number.
+        plot_number_secondary: Secondary plot number.
+        land_use: Description of land usage.
+        area_square_meters: Area of the parcel in square meters.
+        appear_in_offer: Foreign key linking to an AreaOffer.
+        created_by: User who created the parcel.
+        created_at: Timestamp when the parcel was created.
     """
 
-    owner = models.ForeignKey(
-        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="parcels"
+    STATUS_CHOICES = [
+        ("available", "Available"),
+        ("purchased", "Purchased"),
+    ]
+
+    state_name = models.CharField(max_length=64)
+    district_name = models.CharField(max_length=64)
+    municipality_name = models.CharField(max_length=64)
+    cadastral_area = models.CharField(max_length=64)
+    cadastral_sector = models.CharField(max_length=64)
+    plot_number_main = models.CharField(max_length=8, null=True)
+    plot_number_secondary = models.CharField(max_length=8)
+    land_use = models.CharField(max_length=255)
+    area_square_meters = models.DecimalField(max_digits=12, decimal_places=2)
+    polygon = gis_models.PolygonField(null=True, blank=True)  # GeoDjango field for polygons
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="available")
+
+    appear_in_offer = models.ForeignKey(
+        "AreaOffer", related_name="parcels", on_delete=models.SET_NULL, null=True
     )
-    landuse = models.CharField(max_length=100, blank=True, null=True)
-    area = models.FloatField()  # Area in square meters
-    coordinates = models.JSONField()  # Additional geo-coordinates if needed
-    status = models.CharField(
-        max_length=20,
-        choices=[("draft", "Draft"), ("active", "Active")],
-        default="draft",
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="created_parcels"
     )
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        return f"Parcel owned by {self.owner} ({self.area} sqm)"
+        return f"Parcel in {self.state_name}, {self.district_name}"
 
 
 class AreaOffer(models.Model):
     """
-    Model representing an offer for a specific area.
-
-    Attributes:
-        parcel: The parcel associated with the offer.
-        price: The proposed price for the offer.
-        bidding_conditions: Optional conditions for bidding stored as JSON.
-        documents: Related documents for the offer.
-        is_active: Whether the offer is currently active.
-        created_at: The timestamp when the offer was created.
+    Represents an offer containing multiple parcels and criteria set by the landowner.
     """
 
-    parcel = models.ForeignKey(Parcel, on_delete=models.CASCADE, related_name="offers")
-    price = models.DecimalField(max_digits=10, decimal_places=2)
-    bidding_conditions = models.JSONField(null=True, blank=True)
-    documents = models.ManyToManyField(
-        "AreaOfferDocuments", related_name="linked_offers", blank=True
+    identifier = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    offer_number = models.PositiveIntegerField(auto_created=True, unique=True, editable=False)
+    title = models.CharField(max_length=255)
+    description = models.TextField()
+    criteria = models.JSONField(default=dict, blank=True)  # Dynamic key-value pairs
+
+    class OfferStatus(models.TextChoices):
+        IN_PREPARATION = "V", _("In Preparation")
+        PREPARED = "P", _("Prepared")
+        ACTIVE = "A", _("Active")
+        INACTIVE = "I", _("Inactive")
+
+    status = models.CharField(
+        max_length=2, choices=OfferStatus.choices, default=OfferStatus.IN_PREPARATION
     )
-    is_active = models.BooleanField(default=True)
-    created_at = models.DateTimeField(auto_now_add=True)
+    hide_from_search = models.BooleanField(default=False)
+    created_by = models.ForeignKey(
+        MarketUser, on_delete=models.SET_NULL, null=True, related_name="area_offers"
+    )
+    available_from = models.DateField()
+
+    def save(self, *args, **kwargs):
+        if self.offer_number is None:  # Generate only if not already set
+            self.offer_number = self.generate_offer_number()
+        super().save(*args, **kwargs)
+
+    @staticmethod
+    def generate_offer_number():
+        """
+        Generate a unique 6-digit offer number.
+        """
+        while True:
+            offer_number = random.randint(100000, 999999)
+            if not AreaOffer.objects.filter(offer_number=offer_number).exists():
+                return offer_number
+
+    class AreaUtilization(models.TextChoices):
+        NO_RESTRICTION = "NO", _("No Restriction")
+        SALE = "SA", _("Sale")
+        LEASE = "LE", _("Lease")
+
+    utilization = models.CharField(
+        max_length=2, choices=AreaUtilization.choices, default=AreaUtilization.NO_RESTRICTION
+    )
 
     def __str__(self):
-        return f"Offer for {self.parcel} at {self.price} USD"
-
+        return f"{self.title} (#{self.offer_number})"
 
 class AreaOfferDocuments(models.Model):
     """
@@ -109,8 +161,7 @@ class AreaOfferConfirmation(models.Model):
     offer = models.OneToOneField(
         AreaOffer, on_delete=models.CASCADE, related_name="confirmation"
     )
-    confirmed_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    confirmed_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     confirmed_at = models.DateTimeField(auto_now_add=True)
 
 
@@ -129,26 +180,3 @@ class AreaOfferAdministration(models.Model):
     )
     notes = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
-
-
-class Report(models.Model):
-    """
-    Model to store calculated data for a selected parcel or map area.
-
-    Attributes:
-        parcel: The parcel associated with the report.
-        calculation_result: The result of calculations stored as JSON.
-        created_at: The timestamp when the report was created.
-    """
-
-    parcel = models.ForeignKey(
-        Parcel, on_delete=models.CASCADE, related_name="reports", null=True, blank=True
-    )
-    calculation_result = models.JSONField()  # Store calculation output as JSON
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    def __str__(self):
-        return (
-            f"Report for Parcel ID {self.parcel.id if self.parcel else 'Unknown'}"
-            f"created at {self.created_at}"
-            )

@@ -27,12 +27,15 @@ SchemaView = get_schema_view(
     public=True,
     permission_classes=[permissions.AllowAny],
 )
-
+##
 # URL patterns
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("api/accounts/", include("accounts.urls")),
     path("api/offers/", include("offers.urls")),
+    path("api/messaging/", include("messaging.urls")),
+    path("api/reports/", include("reports.urls")),
+    path("api/payments/", include("payments.urls")),
     path(
         "swagger/",
         SchemaView.with_ui("swagger", cache_timeout=0),

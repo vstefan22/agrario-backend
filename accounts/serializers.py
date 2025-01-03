@@ -11,14 +11,12 @@ from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_encode
 from django.utils.translation import gettext_lazy as _
 from rest_framework import serializers
-from datetime import timedelta
-from django.utils.timezone import now
-
+from rest_framework.response import Response
+from rest_framework import status
 from offers.models import AreaOffer, Parcel
 from offers.serializers import AreaOfferSerializer, ParcelSerializer
-from subscriptions.models import ProjectDeveloperSubscriptionDiscount
 
-from .models import Landowner, MarketUser, ProjectDeveloper, InviteLink
+from .models import Landowner, MarketUser, ProjectDeveloper
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -55,23 +53,21 @@ class UserSerializer(serializers.ModelSerializer):
         Validate that passwords match.
         """
         if attrs.get("password") != attrs.get("confirm_password"):
-            raise serializers.ValidationError({"password": "Passwords must match."})
+            raise serializers.ValidationError({"error": "Passwords must match."})
         return attrs
 
-    def create(self, validated_data):
+    def create(self, request, *args, **kwargs):
         """
-        Create a new MarketUser instance.
+        Create a new user and enforce validation for mandatory fields.
         """
-        validated_data.pop("confirm_password")
-        user = MarketUser.objects.create(
-            username=validated_data["username"],
-            first_name=validated_data["first_name"],
-            last_name=validated_data["last_name"],
-            email=validated_data["email"],
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = serializer.save()
+        serializer.send_confirmation_email(user)
+        return Response(
+            {"message": "User registered successfully."},
+            status=status.HTTP_201_CREATED,
         )
-        user.set_password(validated_data["password"])
-        user.save()
-        return user
 
     def update(self, instance, validated_data):
         """
@@ -87,92 +83,91 @@ class UserSerializer(serializers.ModelSerializer):
 
 class UserRegistrationSerializer(serializers.ModelSerializer):
     """
-    Serializer for user registration.
-
-    Handles user creation during registration and email confirmation.
+    Serializer for user registration with mandatory field validation.
     """
-
     invite_code = serializers.CharField(write_only=True, required=False)
     role = serializers.ChoiceField(choices=MarketUser.ROLE_CHOICES)
 
     class Meta:
         model = MarketUser
-        fields = ["username", "email", "password", "invite_code", "role"]
+        fields = [
+            "email",
+            "password",
+            "invite_code",
+            "role",
+            "phone_number",
+            "address",
+            "company_name",
+            "company_website",
+            "profile_picture",
+            "zipcode",
+            "city",
+            "street_housenumber",
+        ]
+        extra_kwargs = {
+            "email": {"required": True},
+            "password": {"write_only": True, "required": True},
+        }
 
-    def validate(self, data):
+    def validate(self, attrs):
         """
-        Validate the invite_code if provided.
+        Validate that mandatory fields are filled.
         """
-        invite_code = data.get("invite_code", None)
+        mandatory_fields = ["email", "password", "role"]
+        if attrs.get("role") == "landowner":
+            mandatory_fields.extend(["phone_number", "address", "zipcode", "city", "street_housenumber"])
+        elif attrs.get("role") == "developer":
+            mandatory_fields.extend(["company_name", "company_website"])
 
-        if invite_code:
-            try:
-                invite_link = InviteLink.objects.get(uri_hash=invite_code, is_active=True)
-                data["referring_user"] = invite_link.created_by
-            except InviteLink.DoesNotExist:
-                raise serializers.ValidationError({"invite_code": "Invalid invite link."})
+        for field in mandatory_fields:
+            if not attrs.get(field):
+                raise serializers.ValidationError({"error": f"{field} is required."})
 
-        return data
+        # Validate password strength
+        if len(attrs["password"]) < 6:
+            raise serializers.ValidationError({"error": "Password must be at least 6 characters long."})
+
+        return attrs
 
     def create(self, validated_data):
         """
         Create a new MarketUser during registration.
         """
-        invite_code = validated_data.pop("invite_code", None)
+        validated_data.pop("invite_code", None)
         role = validated_data.pop("role", "landowner")
-
         user = MarketUser.objects.create_user(
-            username=validated_data["username"],
             email=validated_data["email"],
             password=validated_data["password"],
             role=role,
+            phone_number=validated_data.get("phone_number"),
+            address=validated_data.get("address"),
+            company_name=validated_data.get("company_name"),
+            company_website=validated_data.get("company_website"),
+            profile_picture=validated_data.get("profile_picture"),
+            zipcode=validated_data.get("zipcode"),
+            city=validated_data.get("city"),
+            street_housenumber=validated_data.get("street_housenumber"),
         )
-
-        if invite_code:
-            user._invite_code = invite_code
-
         return user
 
-    def _apply_discount_to_referring_user(self, user):
+    def send_confirmation_email(self, user):
         """
-        Apply a discount to the referring user.
+        Generate and send an email confirmation link to the user.
         """
-        try:
-            ProjectDeveloperSubscriptionDiscount.objects.create(
-                discount_for_user=user,
-                valid_from=now().date(),
-                valid_to=(now() + timedelta(days=30)).date(),
-                amount_percent=10,
-            )
-        except Exception as e:
-            raise serializers.ValidationError(
-                {"error": f"Failed to apply discount: {str(e)}"}
-            )
+        from django.conf import settings
+        from django.urls import reverse
 
-    def send_confirmation_email(self, user, invite_code=None):
-        """
-        Generate and send an email confirmation link with an optional invite code.
-        """
         token = default_token_generator.make_token(user)
         uid = urlsafe_base64_encode(force_bytes(user.pk))
-        
-        confirmation_link = reverse(
-            "confirm-email", kwargs={"uidb64": uid, "token": token}
-        )
-        
-        if invite_code:
-            confirmation_link += f"?invite_code={invite_code}"
-        
+        confirmation_link = f"{settings.BACKEND_URL}{reverse('confirm-email', kwargs={'uidb64': uid, 'token': token})}"
+
         send_mail(
             subject="Confirm Your Email Address",
-            message=(
-                f"Hi {user.username},\n\n"
-                f"Click the link below to confirm your email:\n"
-                f"http://localhost:8000{confirmation_link}"
-            ),
-            from_email="noreply@example.com",
+            message=f"Hi {user.first_name},\n\nClick the link below to confirm your email:\n{confirmation_link}",
+            from_email=settings.EMAIL_HOST_USER,
             recipient_list=[user.email],
         )
+
 
 class LoginSerializer(serializers.Serializer):
     """
@@ -194,14 +189,14 @@ class LoginSerializer(serializers.Serializer):
         try:
             user = MarketUser.objects.get(email=email)
         except MarketUser.DoesNotExist as exc:
-            raise serializers.ValidationError(_("Invalid email or password.")) from exc
+            raise serializers.ValidationError({"error": "Invalid email or password."}) from exc
 
         if not user.check_password(password):
-            raise serializers.ValidationError(_("Invalid email or password."))
+            raise serializers.ValidationError({"error": "Invalid email or password."})
 
         if not user.is_email_confirmed:
             raise serializers.ValidationError(
-                _("Please confirm your email before logging in.")
+                {"error": "Please confirm your email before logging in."}
             )
 
         attrs["user"] = user
@@ -241,7 +236,50 @@ class LandownerDashboardSerializer(serializers.ModelSerializer):
         """
         offers = AreaOffer.objects.filter(created_by=obj)
         return AreaOfferSerializer(offers, many=True).data
+    
 
+class LandownerProfileSerializer(serializers.ModelSerializer):
+    """
+    Serializer for Landowner-specific profile details.
+    """
+    class Meta:
+        model = Landowner
+        fields = [
+            "id",
+            "profile_picture",
+            "first_name",
+            "last_name",
+            "email",
+            "phone_number",
+            "address",
+            "zipcode",
+            "city",
+            "position",  # Landowner-specific attribute
+            "is_email_confirmed",
+        ]
+        read_only_fields = ["id", "email", "is_email_confirmed"]
+
+class DeveloperProfileSerializer(serializers.ModelSerializer):
+    """
+    Serializer for ProjectDeveloper-specific profile details.
+    """
+    class Meta:
+        model = ProjectDeveloper
+        fields = [
+            "id",
+            "profile_picture",
+            "first_name",
+            "last_name",
+            "email",
+            "phone_number",
+            "address",
+            "zipcode",
+            "city",
+            "company_name",  # Developer-specific attribute
+            "company_website",  # Developer-specific attribute
+            "is_email_confirmed",
+        ]
+        read_only_fields = ["id", "email", "is_email_confirmed"]
 
 class DeveloperDashboardSerializer(serializers.ModelSerializer):
     """
