@@ -59,6 +59,7 @@ class Message(models.Model):
     )
     created_at = models.DateTimeField(auto_now_add=True)
     is_read = models.BooleanField(default=False)
+    is_admin_message = models.BooleanField(default=False)
     archived = models.BooleanField(default=False)
     attachments = models.ManyToManyField(
         'Attachment',

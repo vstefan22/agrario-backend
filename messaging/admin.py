@@ -16,14 +16,13 @@ class MessageAdmin(admin.ModelAdmin):
     """
     Admin configuration for the Message model.
     """
-    list_display = ('subject', 'sender', 'get_recipient', 'created_at')  # Use a custom method
-    list_filter = ('created_at', 'sender', 'chat')  # Replace 'recipient' with valid fields
+    list_display = ('subject', 'sender', 'created_at', 'is_admin_message', 'is_read')  # Use a custom method
+    list_filter = ('created_at', 'sender', 'chat', 'is_admin_message')
     search_fields = ('subject', 'sender__email', 'body')  # Removed 'recipient__email'
     ordering = ('-created_at',)
 
-    def get_recipient(self, obj):
-        return ", ".join([str(participant) for participant in obj.chat.user2.all()]) if obj.chat.user2 else "No Recipient"
-    get_recipient.short_description = "Recipient"
+    # def get_recipient(self, obj):
+    #     return obj.recipient.all()
 
     def get_queryset(self, request):
         """

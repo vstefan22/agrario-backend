@@ -32,6 +32,7 @@ class MessageSerializer(serializers.ModelSerializer):
     recipient_id = serializers.UUIDField(write_only=True)  # For input
     recipient = serializers.StringRelatedField(read_only=True)  # Display recipient in response
     sender = serializers.StringRelatedField(read_only=True)  # Display sender in response
+    is_admin_message = serializers.BooleanField(read_only=True)
     attachments = AttachmentSerializer(many=True, read_only=True)
     attachment_files = serializers.ListField(
         child=serializers.FileField(),
@@ -45,9 +46,9 @@ class MessageSerializer(serializers.ModelSerializer):
         fields = (
             'identifier', 'recipient_id', 'recipient', 'sender', 
             'subject', 'body', 'attachments', 'attachment_files', 
-            'created_at', 'is_read', 'previous_messages'
+            'created_at', 'is_read', 'previous_messages', 'is_admin_message'
         )
-        read_only_fields = ['identifier', 'created_at', 'is_read', 'attachments', 'sender']
+        read_only_fields = ['identifier', 'created_at', 'is_read', 'attachments', 'sender', 'is_admin_message']
 
     def get_previous_messages(self, obj):
         """

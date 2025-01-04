@@ -6,7 +6,7 @@ Handles Firebase authentication and user management integration with Django.
 
 import logging
 logger = logging.getLogger(__name__)
-
+from django.db import transaction
 import firebase_admin
 from firebase_admin import auth, credentials
 from django.conf import settings
@@ -87,18 +87,27 @@ class FirebaseAuthentication(BaseAuthentication):
         if not email:
             raise AuthenticationFailed({"error": "Email not found in Firebase token."})
 
-        # Get user role using utility function
-        role = get_user_role(decoded_token, email)
-        if not role:
-            raise AuthenticationFailed({"error": "Role not found for the user."})
+        # Example: Identify superuser by Firebase custom claims
+        is_superuser = decoded_token.get("is_superuser", False)
 
         try:
-            user, _ = MarketUser.objects.get_or_create(
-                email=email,
-                defaults={"username": email.split("@")[0], "role": role},
-            )
+            with transaction.atomic():
+                user, created = MarketUser.objects.get_or_create(
+                    email=email,
+                    defaults={
+                        "username": email.split("@")[0],
+                        "is_superuser": is_superuser,
+                        "is_staff": is_superuser,
+                    },
+                )
+
+                # Update existing user superuser status if needed
+                if user.is_superuser != is_superuser:
+                    user.is_superuser = is_superuser
+                    user.is_staff = is_superuser
+                    user.save(update_fields=["is_superuser", "is_staff"])
+
         except Exception as e:
             raise AuthenticationFailed({"error": "Failed to authenticate user."}) from e
 
-        request.user_role = role  # Attach role to the request object
         return (user, None)
