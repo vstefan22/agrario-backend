@@ -37,7 +37,8 @@ BACKEND_URL = os.getenv('BACKEND_URL')
 STRIPE_SECRET_KEY = "sk_test_51Qbmc4RnpHijSsKDQROpbHOaU6e24KCuubsUxDQ2cWe50YrWAb1q6mDWcMdT7i8IdT0Sr8F9HaOr0PBjjEDlbsfJ00MHIAXOUR"  # From Stripe dashboard (Test Mode)
 STRIPE_PUBLISHABLE_KEY = "pk_test_51Qbmc4RnpHijSsKDaKN8ljxCHUheC8cdFyxGD7KlsmyVHVqyqS2roS32z8k4GnCu0Hcv01AXzwrEXOahXkXfBqEe00BbdYgoQdy"  # From Stripe dashboard (Test Mode)
 STRIPE_ENDPOINT_SECRET = "whsec_154627c69d9ff877159ef9e1e07f48f151cc1cf2a9ca38e8749512d7c988591a"  # From Stripe Webhooks (Test Mode)
-GDAL_LIBRARY_PATH = "/app/.heroku/vendor/lib/libgdal.so"
+if 'DYNO' in os.environ:  # Heroku environment
+    GDAL_LIBRARY_PATH = os.environ.get('GDAL_LIBRARY_PATH')
 ALLOWED_HOSTS = ["127.0.0.1",
                 'agrario-backend-cc0a3b9c6ae6.herokuapp.com', 'localhost']
 
