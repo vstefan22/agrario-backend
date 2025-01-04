@@ -10,6 +10,7 @@ from django.contrib.auth.models import AbstractUser
 from phonenumber_field.modelfields import PhoneNumberField
 from django.db import models
 # from django.contrib.gis.db import models as models2
+from firebase_admin import auth
 from django.contrib.auth.models import BaseUserManager
 
 class MarketUserManager(BaseUserManager):
@@ -34,7 +35,22 @@ class MarketUserManager(BaseUserManager):
         if extra_fields.get('is_superuser') is not True:
             raise ValueError("Superuser must have is_superuser=True.")
 
-        return self.create_user(email, password, **extra_fields)
+        # Validate password length
+        if not password or len(password) < 6:
+            raise ValueError("Password must be at least 6 characters long.")
+
+
+        # Create Django user
+        user = self.create_user(email, password, **extra_fields)
+
+        # Create Firebase user
+        firebase_user = auth.create_user(email=email, password=password)
+        user.firebase_uid = firebase_user.uid
+        user.is_active = True  # Superusers are active by default
+        user.is_email_confirmed = True  # Skip email confirmation for superusers
+        user.save()
+
+        return user
 
 class MarketUser(AbstractUser):
     """

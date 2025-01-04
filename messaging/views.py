@@ -10,7 +10,7 @@ from django.db.models import Q, Max, Count
 from accounts.models import MarketUser
 import uuid
 import logging
-from rest_framework.exceptions import ValidationError
+from rest_framework.exceptions import ValidationError, PermissionDenied
 logger = logging.getLogger(__name__)
 from rest_framework.pagination import PageNumberPagination
 
@@ -138,3 +138,60 @@ class MessageViewSet(viewsets.ModelViewSet):
 
         serializer = self.get_serializer(instance)
         return Response(serializer.data)
+    
+    @action(detail=False, methods=['post'], url_path='admin-message')
+    def admin_message(self, request):
+        """
+        Allow superusers to send admin messages to a specific user.
+        """
+        if not request.user.is_superuser:
+            raise PermissionDenied("Only superusers can send admin messages.")
+
+        recipient_id = request.data.get("recipient_id")
+        subject = request.data.get("subject", "Admin Message")
+        body = request.data.get("body", "")
+
+        if not recipient_id:
+            return Response({"error": "Recipient ID is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        recipient = MarketUser.objects.filter(identifier=recipient_id).first()
+        if not recipient:
+            return Response({"error": "Recipient not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        message = Message.objects.create(
+            sender=request.user,
+            recipient=recipient,
+            subject=subject,
+            body=body,
+            is_admin_message=True
+        )
+
+        return Response(MessageSerializer(message).data, status=status.HTTP_201_CREATED)
+
+    @action(detail=False, methods=['post'], url_path='broadcast')
+    def broadcast_message(self, request):
+        """
+        Allow superusers to send a broadcast message to all users.
+        """
+        if not request.user.is_superuser:
+            raise PermissionDenied("Only superusers can send broadcast messages.")
+
+        subject = request.data.get("subject", "Broadcast Message")
+        body = request.data.get("body", "")
+
+        # Retrieve all users
+        users = MarketUser.objects.all()
+        messages = [
+            Message(
+                sender=request.user,
+                recipient=user,
+                subject=subject,
+                body=body,
+                is_admin_message=True
+            )
+            for user in users
+        ]
+
+        Message.objects.bulk_create(messages)
+
+        return Response({"message": "Broadcast sent successfully."}, status=status.HTTP_201_CREATED)
