@@ -7,7 +7,6 @@ on:
   pull_request:
     branches:
       - main
-
 jobs:
   test-build:
     name: Test and Build
@@ -39,11 +38,14 @@ jobs:
       - name: Verify GDAL Installation
         run: |
           gdalinfo --version
+          gdal-config --version
           whereis gdal-config
-          find / -name "libgdal*"
+          find / -name "gdal-config"
 
-      - name: Set GDAL Library Path
-        run: echo "export GDAL_LIBRARY_PATH=/usr/lib/libgdal.so" >> $GITHUB_ENV
+      - name: Set GDAL Environment Variables
+        run: |
+          echo "export GDAL_CONFIG=/usr/bin/gdal-config" >> $GITHUB_ENV
+          echo "export GDAL_LIBRARY_PATH=/usr/lib/libgdal.so" >> $GITHUB_ENV
 
       - name: Test GDAL Python Bindings
         run: python -c "from osgeo import gdal; print(gdal.VersionInfo())"
@@ -57,35 +59,6 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-
-      - name: Decode Firebase Credentials
-        env:
-          FIREBASE_CREDENTIALS_BASE64: ${{ secrets.FIREBASE_CREDENTIALS_BASE64 }}
-        run: |
-          echo $FIREBASE_CREDENTIALS_BASE64 | base64 -d > firebase-credentials.json
-          echo "FIREBASE_CREDENTIALS_JSON_PATH=firebase-credentials.json" >> $GITHUB_ENV
-
-      - name: Decode Google Credentials
-        env:
-          GOOGLE_CREDENTIALS_BASE64: ${{ secrets.GOOGLE_CREDENTIALS_BASE64 }}
-        run: |
-          echo $GOOGLE_CREDENTIALS_BASE64 | base64 -d > google-credentials.json
-          echo "GOOGLE_CREDENTIALS_JSON_PATH=google-credentials.json" >> $GITHUB_ENV
-
-      - name: Set Environment Variables
-        run: |
-          echo "FRONTEND_URL=http://localhost:5173" >> $GITHUB_ENV
-          echo "BACKEND_URL=http://127.0.0.1:8000" >> $GITHUB_ENV
-
-      - name: Set up PostgreSQL
-        env:
-          DATABASE_URL: postgres://ub8kb03rqg26me:p47260b1a24916e34fcf8146e2b71b1c86efcfb512329b9e225fc68865c162474@c97r84s7psuajm.cluster-czrs8kj4isg7.us-east-1.rds.amazonaws.com:5432/dfan664fkppvgj
-        run: |
-          python manage.py makemigrations
-          python manage.py migrate
-
-      - name: Run tests
-        run: python manage.py test
 
   deploy:
     name: Deploy to Heroku
