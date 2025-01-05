@@ -7,6 +7,7 @@ on:
   pull_request:
     branches:
       - main
+
 jobs:
   test-build:
     name: Test and Build
@@ -29,8 +30,9 @@ jobs:
           ref: main
           fetch-depth: 0
 
-      - name: Install GDAL and dependencies
+      - name: Add ubuntugis PPA for GDAL 3.9.0
         run: |
+          sudo add-apt-repository -y ppa:ubuntugis/ubuntugis-unstable
           sudo apt-get update
           sudo apt-get install -y gdal-bin libgdal-dev
 
