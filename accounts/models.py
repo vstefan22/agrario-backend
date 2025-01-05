@@ -12,10 +12,12 @@ from django.db import models
 # from django.contrib.gis.db import models as models2
 from django.contrib.auth.models import BaseUserManager
 
+
 class MarketUserManager(BaseUserManager):
     """
     Custom manager for MarketUser without a username field.
     """
+
     def create_user(self, email, password=None, **extra_fields):
         if not email:
             raise ValueError("The Email field must be set")
@@ -35,6 +37,7 @@ class MarketUserManager(BaseUserManager):
             raise ValueError("Superuser must have is_superuser=True.")
 
         return self.create_user(email, password, **extra_fields)
+
 
 class MarketUser(AbstractUser):
     """
@@ -67,7 +70,8 @@ class MarketUser(AbstractUser):
     address = models.CharField(max_length=255, null=True, blank=True)
     company_name = models.CharField(max_length=255, null=True, blank=True)
     company_website = models.URLField(null=True, blank=True)
-    profile_picture = models.FileField(upload_to="profile_pictures/", blank=True)
+    profile_picture = models.FileField(
+        upload_to="profile_pictures/", blank=True)
     city = models.CharField(max_length=50, null=True)
     street_housenumber = models.CharField(max_length=50, null=True)
     zipcode = models.CharField(max_length=5)
@@ -78,8 +82,9 @@ class MarketUser(AbstractUser):
     reset_code_created_at = models.DateTimeField(null=True, blank=True)
 
     USERNAME_FIELD = "email"
-    REQUIRED_FIELDS = ['first_name', 'last_name', 'company_name', 'address', 'zipcode', 'city', 'phone_number']
-    
+    REQUIRED_FIELDS = ['first_name', 'last_name', 'company_name',
+                       'address', 'zipcode', 'city', 'phone_number']
+
     objects = MarketUserManager()
 
     def __str__(self):
@@ -99,6 +104,7 @@ class MarketUser(AbstractUser):
         if self.file:
             self.file.delete()
         super().delete(*args, **kwargs)
+
 
 class Landowner(MarketUser):
     """
@@ -133,7 +139,8 @@ class ProjectDeveloper(MarketUser):
     class Meta:
         verbose_name = "Project Developer"
         verbose_name_plural = "Project Developers"
-        
+
+
 class Region(models.Model):
 
     name = models.CharField(max_length=64)
@@ -144,6 +151,7 @@ class Region(models.Model):
     )
 
     # geom = models2.MultiPolygonField()
+
 
 class ProjectDeveloperInterest(models.Model):
     """Interest of the project developer"""

@@ -3,16 +3,16 @@
 Provides endpoints for managing land use, parcels, area offers, and associated documents.
 """
 
+from decimal import Decimal
+from django.contrib.gis.geos import GEOSGeometry
 from rest_framework import status, viewsets
-from rest_framework.exceptions import PermissionDenied
 from rest_framework.decorators import action
 from rest_framework.permissions import BasePermission, IsAuthenticated
 from rest_framework.response import Response
-from accounts.models import MarketUser
-from decimal import Decimal
-from payments.models import PaymentTransaction
-from django.db.models import Q
 from rest_framework.parsers import MultiPartParser
+from accounts.models import MarketUser
+from payments.models import PaymentTransaction
+from reports.models import Report
 from .models import (
     AreaOffer,
     AreaOfferConfirmation,
@@ -27,9 +27,7 @@ from .serializers import (
     LanduseSerializer,
     ParcelSerializer,
 )
-from reports.models import Report
 from accounts.firebase_auth import verify_firebase_token
-from django.contrib.gis.geos import GEOSGeometry
 
 
 class FirebaseIsAuthenticated(BasePermission):
@@ -551,26 +549,7 @@ class AreaOfferViewSet(viewsets.ModelViewSet):
             {"message": "Offer deactivated successfully."},
             status=status.HTTP_200_OK,
         )
-
-    # def get_queryset(self):
-    #     """
-    #     Filter offers based on the logged-in user.
-    #     """
-    #     queryset = super().get_queryset()
-    #     user_email = self.request.user_email  # From Firebase authentication
-
-    #     # Filter offers where parcels are created by the logged-in user
-    #     queryset = queryset.filter(parcels__created_by__email=user_email).distinct()
-
-    #     # Optional filters
-    #     status = self.request.query_params.get("status")
-    #     utilization = self.request.query_params.get("utilization")
-    #     if status:
-    #         queryset = queryset.filter(status=status)
-    #     if utilization:
-    #         queryset = queryset.filter(utilization=utilization)
-
-    #     return queryset
+    
     def get_queryset(self):
         queryset = super().get_queryset()
         user_email = self.request.user_email  # From Firebase authentication
