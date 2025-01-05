@@ -26,7 +26,7 @@ drf-yasg==1.21.8
 filelock==3.16.1
 firebase==4.0.1
 firebase-admin==6.6.0
-GDAL==3.10.0
+gdal==3.10.0
 google-api-core==2.24.0
 google-api-python-client==2.155.0
 google-auth==2.37.0
