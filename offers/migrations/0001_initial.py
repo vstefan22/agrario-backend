@@ -19,7 +19,8 @@ class Migration(migrations.Migration):
         migrations.CreateModel(
             name='Landuse',
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                ('id', models.BigAutoField(auto_created=True,
+                 primary_key=True, serialize=False, verbose_name='ID')),
                 ('name', models.CharField(max_length=100, unique=True)),
                 ('description', models.TextField(blank=True)),
             ],
@@ -27,48 +28,61 @@ class Migration(migrations.Migration):
         migrations.CreateModel(
             name='AreaOffer',
             fields=[
-                ('offer_number', models.PositiveIntegerField(auto_created=True, editable=False, unique=True)),
-                ('identifier', models.UUIDField(default=uuid.uuid4, editable=False, primary_key=True, serialize=False)),
+                ('offer_number', models.PositiveIntegerField(
+                    auto_created=True, editable=False, unique=True)),
+                ('identifier', models.UUIDField(default=uuid.uuid4,
+                 editable=False, primary_key=True, serialize=False)),
                 ('title', models.CharField(max_length=255)),
                 ('description', models.TextField()),
-                ('status', models.CharField(choices=[('V', 'In Preparation'), ('P', 'Prepared'), ('A', 'Active'), ('I', 'Inactive')], default='V', max_length=2)),
+                ('status', models.CharField(choices=[('V', 'In Preparation'), ('P', 'Prepared'), (
+                    'A', 'Active'), ('I', 'Inactive')], default='V', max_length=2)),
                 ('hide_from_search', models.BooleanField(default=False)),
                 ('available_from', models.DateField()),
-                ('utilization', models.CharField(choices=[('NO', 'No Restriction'), ('SA', 'Sale'), ('LE', 'Lease')], default='NO', max_length=2)),
-                ('created_by', models.ForeignKey(null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='area_offers', to=settings.AUTH_USER_MODEL)),
+                ('utilization', models.CharField(choices=[
+                 ('NO', 'No Restriction'), ('SA', 'Sale'), ('LE', 'Lease')], default='NO', max_length=2)),
+                ('created_by', models.ForeignKey(null=True, on_delete=django.db.models.deletion.SET_NULL,
+                 related_name='area_offers', to=settings.AUTH_USER_MODEL)),
             ],
         ),
         migrations.CreateModel(
             name='AreaOfferAdministration',
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                ('id', models.BigAutoField(auto_created=True,
+                 primary_key=True, serialize=False, verbose_name='ID')),
                 ('notes', models.TextField(blank=True)),
                 ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('offer', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='administration', to='offers.areaoffer')),
+                ('offer', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE,
+                 related_name='administration', to='offers.areaoffer')),
             ],
         ),
         migrations.CreateModel(
             name='AreaOfferConfirmation',
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                ('id', models.BigAutoField(auto_created=True,
+                 primary_key=True, serialize=False, verbose_name='ID')),
                 ('confirmed_at', models.DateTimeField(auto_now_add=True)),
-                ('confirmed_by', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to=settings.AUTH_USER_MODEL)),
-                ('offer', models.OneToOneField(on_delete=django.db.models.deletion.CASCADE, related_name='confirmation', to='offers.areaoffer')),
+                ('confirmed_by', models.ForeignKey(
+                    on_delete=django.db.models.deletion.CASCADE, to=settings.AUTH_USER_MODEL)),
+                ('offer', models.OneToOneField(on_delete=django.db.models.deletion.CASCADE,
+                 related_name='confirmation', to='offers.areaoffer')),
             ],
         ),
         migrations.CreateModel(
             name='AreaOfferDocuments',
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                ('id', models.BigAutoField(auto_created=True,
+                 primary_key=True, serialize=False, verbose_name='ID')),
                 ('document', models.FileField(upload_to='area_offer_documents/')),
                 ('uploaded_at', models.DateTimeField(auto_now_add=True)),
-                ('offer', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='documented_offers', to='offers.areaoffer')),
+                ('offer', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE,
+                 related_name='documented_offers', to='offers.areaoffer')),
             ],
         ),
         migrations.CreateModel(
             name='Parcel',
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                ('id', models.BigAutoField(auto_created=True,
+                 primary_key=True, serialize=False, verbose_name='ID')),
                 ('state_name', models.CharField(max_length=64)),
                 ('district_name', models.CharField(max_length=64)),
                 ('municipality_name', models.CharField(max_length=64)),
@@ -77,12 +91,17 @@ class Migration(migrations.Migration):
                 ('plot_number_main', models.CharField(max_length=8, null=True)),
                 ('plot_number_secondary', models.CharField(max_length=8)),
                 ('land_use', models.CharField(max_length=255)),
-                ('area_square_meters', models.DecimalField(decimal_places=2, max_digits=12)),
-                ('polygon', django.contrib.gis.db.models.fields.PolygonField(blank=True, null=True, srid=4326)),
-                ('status', models.CharField(choices=[('available', 'Available'), ('purchased', 'Purchased')], default='available', max_length=20)),
+                ('area_square_meters', models.DecimalField(
+                    decimal_places=2, max_digits=12)),
+                ('polygon', django.contrib.gis.db.models.fields.PolygonField(
+                    blank=True, null=True, srid=4326)),
+                ('status', models.CharField(choices=[
+                 ('available', 'Available'), ('purchased', 'Purchased')], default='available', max_length=20)),
                 ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('appear_in_offer', models.ForeignKey(null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='parcels', to='offers.areaoffer')),
-                ('created_by', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='created_parcels', to=settings.AUTH_USER_MODEL)),
+                ('appear_in_offer', models.ForeignKey(
+                    null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='parcels', to='offers.areaoffer')),
+                ('created_by', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE,
+                 related_name='created_parcels', to=settings.AUTH_USER_MODEL)),
             ],
         ),
     ]

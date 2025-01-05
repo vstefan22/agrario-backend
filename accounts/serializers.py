@@ -17,6 +17,7 @@ from offers.models import AreaOffer, Parcel
 from offers.serializers import AreaOfferSerializer, ParcelSerializer
 
 from .models import Landowner, MarketUser, ProjectDeveloper
+from .models import Landowner, MarketUser, ProjectDeveloper
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -53,7 +54,8 @@ class UserSerializer(serializers.ModelSerializer):
         Validate that passwords match.
         """
         if attrs.get("password") != attrs.get("confirm_password"):
-            raise serializers.ValidationError({"error": "Passwords must match."})
+            raise serializers.ValidationError(
+                {"error": "Passwords must match."})
         return attrs
 
     def create(self, request, *args, **kwargs):
@@ -115,17 +117,20 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
         """
         mandatory_fields = ["email", "password", "role"]
         if attrs.get("role") == "landowner":
-            mandatory_fields.extend(["phone_number", "address", "zipcode", "city", "street_housenumber"])
+            mandatory_fields.extend(
+                ["phone_number", "address", "zipcode", "city", "street_housenumber"])
         elif attrs.get("role") == "developer":
             mandatory_fields.extend(["company_name", "company_website"])
 
         for field in mandatory_fields:
             if not attrs.get(field):
-                raise serializers.ValidationError({"error": f"{field} is required."})
+                raise serializers.ValidationError(
+                    {"error": f"{field} is required."})
 
         # Validate password strength
         if len(attrs["password"]) < 6:
-            raise serializers.ValidationError({"error": "Password must be at least 6 characters long."})
+            raise serializers.ValidationError(
+                {"error": "Password must be at least 6 characters long."})
 
         return attrs
 
@@ -133,6 +138,7 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
         """
         Create a new MarketUser during registration.
         """
+        validated_data.pop("invite_code", None)
         validated_data.pop("invite_code", None)
         role = validated_data.pop("role", "landowner")
         user = MarketUser.objects.create_user(
@@ -151,6 +157,8 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
         return user
 
     def send_confirmation_email(self, user):
+
+    def send_confirmation_email(self, user):
         """
         Generate and send an email confirmation link to the user.
         """
@@ -159,11 +167,13 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
 
         token = default_token_generator.make_token(user)
         uid = urlsafe_base64_encode(force_bytes(user.pk))
-        confirmation_link = f"{settings.BACKEND_URL}{reverse('confirm-email', kwargs={'uidb64': uid, 'token': token})}"
+        confirmation_link = f"{settings.BACKEND_URL}{
+            reverse('confirm-email', kwargs={'uidb64': uid, 'token': token})}"
 
         send_mail(
             subject="Confirm Your Email Address",
-            message=f"Hi {user.first_name},\n\nClick the link below to confirm your email:\n{confirmation_link}",
+            message=f"Hi {user.first_name},\n\nClick the link below to confirm your email:\n{
+                confirmation_link}",
             from_email=settings.EMAIL_HOST_USER,
             recipient_list=[user.email],
         )
@@ -189,10 +199,12 @@ class LoginSerializer(serializers.Serializer):
         try:
             user = MarketUser.objects.get(email=email)
         except MarketUser.DoesNotExist as exc:
-            raise serializers.ValidationError({"error": "Invalid email or password."}) from exc
+            raise serializers.ValidationError(
+                {"error": "Invalid email or password."}) from exc
 
         if not user.check_password(password):
-            raise serializers.ValidationError({"error": "Invalid email or password."})
+            raise serializers.ValidationError(
+                {"error": "Invalid email or password."})
 
         if not user.is_email_confirmed:
             raise serializers.ValidationError(
@@ -236,7 +248,7 @@ class LandownerDashboardSerializer(serializers.ModelSerializer):
         """
         offers = AreaOffer.objects.filter(created_by=obj)
         return AreaOfferSerializer(offers, many=True).data
-    
+
 
 class LandownerProfileSerializer(serializers.ModelSerializer):
     """
@@ -259,6 +271,7 @@ class LandownerProfileSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ["id", "email", "is_email_confirmed"]
 
+
 class DeveloperProfileSerializer(serializers.ModelSerializer):
     """
     Serializer for ProjectDeveloper-specific profile details.
@@ -280,6 +293,7 @@ class DeveloperProfileSerializer(serializers.ModelSerializer):
             "is_email_confirmed",
         ]
         read_only_fields = ["id", "email", "is_email_confirmed"]
+
 
 class DeveloperDashboardSerializer(serializers.ModelSerializer):
     """

@@ -25,7 +25,6 @@ from rest_framework.views import APIView
 from offers.models import AreaOffer, Parcel
 from .models import MarketUser
 from .firebase_auth import FirebaseAuthentication, verify_firebase_token, create_firebase_user
-from .models import MarketUser
 from .serializers import UserRegistrationSerializer, UserSerializer, LandownerProfileSerializer, DeveloperProfileSerializer
 from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_encode
