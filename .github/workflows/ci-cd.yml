@@ -26,16 +26,12 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
-        with:
-          ref: main
-          fetch-depth: 0
 
-      - name: Install GDAL and Dependencies
+      - name: Install Latest GDAL and Dependencies
         run: |
+          sudo add-apt-repository -y ppa:ubuntugis/ubuntugis-unstable
           sudo apt-get update
-          sudo apt-get install -y gdal-bin libgdal-dev
-          which gdal-config || echo "gdal-config not found"
-          export PATH="/usr/bin:$PATH"
+          sudo apt-get install -y gdal-bin=3.9.0 libgdal-dev=3.9.0
           export GDAL_CONFIG=/usr/bin/gdal-config
           echo "GDAL_CONFIG=/usr/bin/gdal-config" >> $GITHUB_ENV
 
@@ -43,7 +39,6 @@ jobs:
         run: |
           gdal-config --version
           gdalinfo --version
-          ls -l /usr/include/gdal
 
       - name: Set GDAL Environment Variables
         run: |
@@ -76,15 +71,12 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
-        with:
-          ref: main
-          fetch-depth: 0
 
-      - name: Install GDAL and Dependencies
+      - name: Install Latest GDAL and Dependencies
         run: |
+          sudo add-apt-repository -y ppa:ubuntugis/ubuntugis-unstable
           sudo apt-get update
-          sudo apt-get install -y gdal-bin libgdal-dev
-          export PATH="/usr/bin:$PATH"
+          sudo apt-get install -y gdal-bin=3.9.0 libgdal-dev=3.9.0
           export GDAL_CONFIG=/usr/bin/gdal-config
           echo "GDAL_CONFIG=/usr/bin/gdal-config" >> $GITHUB_ENV
 
