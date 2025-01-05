@@ -61,7 +61,7 @@ jobs:
 
       - name: Set up PostgreSQL
         env:
-          DATABASE_URL: postgres://ufav6e2g8vvcga:pa48301d496c284ee80258e838b1531f950f963c607bb9a100bf8006a7d0cc7d7@c3cj4hehegopde.cluster-czrs8kj4isg7.us-east-1.rds.amazonaws.com:5432/ddcrncnopvagu
+          DATABASE_URL: postgres://ub8kb03rqg26me:p47260b1a24916e34fcf8146e2b71b1c86efcfb512329b9e225fc68865c162474@c97r84s7psuajm.cluster-czrs8kj4isg7.us-east-1.rds.amazonaws.com:5432/dfan664fkppvgj
         run: |
           python manage.py makemigrations
           python manage.py migrate
