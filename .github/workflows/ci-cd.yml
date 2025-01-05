@@ -33,7 +33,16 @@ jobs:
         run: |
           sudo add-apt-repository -y ppa:ubuntugis/ubuntugis-unstable
           sudo apt-get update
-          sudo apt-get install -y gdal-bin libgdal-dev
+          sudo apt-get install -y gdal-bin=3.9.0 libgdal-dev=3.9.0
+          which gdal-config || echo "gdal-config not found"
+          export PATH="/usr/bin:$PATH"
+          export GDAL_CONFIG=/usr/bin/gdal-config
+          echo "GDAL_CONFIG=/usr/bin/gdal-config" >> $GITHUB_ENV
+
+      - name: Install Python Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
 
       - name: Verify GDAL Installation
         run: |
