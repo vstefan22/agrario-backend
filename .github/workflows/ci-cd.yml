@@ -76,6 +76,12 @@ jobs:
           export GDAL_CONFIG=/usr/bin/gdal-config
           echo "GDAL_CONFIG=/usr/bin/gdal-config" >> $GITHUB_ENV
 
+      - name: Check GDAL Installation
+        run: |
+          which gdal-config || echo "gdal-config not found"
+          gdal-config --version || echo "gdal-config version check failed"
+          ls -l /usr/include/gdal || echo "GDAL headers not found"
+
       - name: Decode Firebase Credentials
         env:
           FIREBASE_CREDENTIALS_BASE64: ${{ secrets.FIREBASE_CREDENTIALS_BASE64 }}
