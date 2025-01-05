@@ -37,25 +37,17 @@ jobs:
 
       - name: Verify GDAL Installation
         run: |
-          gdalinfo --version
           gdal-config --version
-          whereis gdal-config
-          find /usr/lib /usr/local/lib -name "libgdal*" || echo "GDAL files not found in /usr/lib or /usr/local/lib"
+          gdalinfo --version
 
       - name: Set GDAL Environment Variables
         run: |
-          echo "export GDAL_CONFIG=/usr/bin/gdal-config" >> $GITHUB_ENV
-          echo "export GDAL_LIBRARY_PATH=/usr/lib/libgdal.so" >> $GITHUB_ENV
+          export CPLUS_INCLUDE_PATH=/usr/include/gdal
+          export C_INCLUDE_PATH=/usr/include/gdal
+          echo "CPLUS_INCLUDE_PATH=/usr/include/gdal" >> $GITHUB_ENV
+          echo "C_INCLUDE_PATH=/usr/include/gdal" >> $GITHUB_ENV
 
-      - name: Test GDAL Python Bindings
-        run: python -c "from osgeo import gdal; print(gdal.VersionInfo())"
-
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: 3.11.11
-
-      - name: Install dependencies
+      - name: Install Python Dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
