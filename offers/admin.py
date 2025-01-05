@@ -39,12 +39,24 @@ class ParcelAdmin(admin.ModelAdmin):
 @admin.register(AreaOffer)
 class AreaOfferAdmin(admin.ModelAdmin):
     """
-    Admin configuration for the AreaOffer model.
+    Admin configuration for AreaOffer model.
     """
-
-    list_display = ("id", "parcel", "price", "is_active", "created_at")
-    search_fields = ("parcel__owner__username", "price")
-    list_filter = ("is_active",)
+    list_display = (
+        "identifier",  # Unique identifier
+        "offer_number",  # Offer number
+        "title",  # Title of the offer
+        "status",  # Current status of the offer
+        "utilization",  # Utilization type (Sale, Lease, etc.)
+        "available_from",  # Availability date
+        "created_by",  # Landowner who created the offer
+    )
+    list_filter = (
+        "status",  # Filter by status
+        "utilization",  # Filter by utilization type
+        "available_from",  # Filter by availability date
+    )
+    search_fields = ("title", "description", "offer_number")  # Search fields
+    ordering = ("-available_from",)  # Default ordering
 
 
 class AreaOfferDocumentsAdmin(admin.ModelAdmin):

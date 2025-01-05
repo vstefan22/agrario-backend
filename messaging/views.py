@@ -1,108 +1,197 @@
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
-from .models import Message
-from .serializers import MessageSerializer, ThreadSummarySerializer
+from rest_framework import serializers
+from .models import Message, Chat, Attachment
+from .serializers import MessageSerializer, ChatSerializer
 from rest_framework import status, viewsets
 from django.db import models
 from django.db.models import Q, Max, Count
 from accounts.models import MarketUser
 import uuid
+import logging
+from rest_framework.exceptions import ValidationError, PermissionDenied
+logger = logging.getLogger(__name__)
+from rest_framework.pagination import PageNumberPagination
+
+
+class ChatViewSet(viewsets.ModelViewSet):
+    queryset = Chat.objects.all()
+    serializer_class = ChatSerializer
+    permission_classes = [IsAuthenticated]
+    pagination_class = PageNumberPagination
+
+    def get_queryset(self):
+        """
+        Return chats associated with the authenticated user.
+        """
+        user = self.request.user
+        return Chat.objects.filter(models.Q(user1=user) | models.Q(user2=user))
+
+    @action(detail=False, methods=['get'], url_path='my-chats')
+    def my_chats(self, request):
+        """
+        Retrieve all chats for the logged-in user.
+        """
+        chats = self.get_queryset()
+        serializer = self.get_serializer(chats, many=True)
+        return Response(serializer.data)
+    
 
 class MessageViewSet(viewsets.ModelViewSet):
-    """
-    ViewSet for managing messages between users.
-    """
     queryset = Message.objects.all()
     serializer_class = MessageSerializer
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
         """
-        Retrieve messages involving the authenticated user.
+        Retrieve messages related to chats involving the authenticated user.
         """
         user = self.request.user
-        queryset = Message.objects.filter(
-            Q(sender=user) | Q(recipient=user)
-        )
-        sort_by = self.request.query_params.get('sort_by', 'created_at')
-        return queryset.order_by(sort_by)
+        return Message.objects.filter(
+            models.Q(chat__user1=user) | models.Q(chat__user2=user),
+            archived=False
+        ).order_by(self.request.query_params.get('sort_by', '-created_at'))  # Default: newest first
 
-    def create(self, request, *args, **kwargs):
+    def perform_create(self, serializer):
         """
-        Create a new message and assign a thread.
+        Handle creating a new message, including attaching files and checking for a chat.
         """
-        user = request.user  # The sender is the logged-in user
-        data = request.data
-        data['sender'] = user.id  # Automatically assign the sender
+        sender = self.request.user
+        recipient_id = self.request.data.get("recipient_id")
 
-        try:
-            recipient = MarketUser.objects.get(identifier=data['recipient'])
-        except MarketUser.DoesNotExist:
-            return Response({"recipient": "Invalid recipient - user does not exist."}, status=status.HTTP_400_BAD_REQUEST)
+        if not recipient_id:
+            raise ValidationError({"recipient_id": "Recipient ID is required."})
 
-        # Check for existing thread
-        existing_thread = Message.objects.filter(
-            Q(sender=user, recipient=recipient) |
-            Q(sender=recipient, recipient=user)
-        ).values_list('thread', flat=True).first()
+        recipient = MarketUser.objects.filter(identifier=recipient_id).first()
+        if not recipient:
+            raise ValidationError({"recipient_id": "Recipient not found."})
 
-        # Assign the thread programmatically
-        data['thread'] = existing_thread if existing_thread else uuid.uuid4()
+        chat, created = Chat.objects.get_or_create(user1=sender, user2=recipient)
 
-        # Serialize and save the message
-        serializer = self.get_serializer(data=data)
-        serializer.is_valid(raise_exception=True)
-        message = serializer.save()
+        # Attach previous messages in the same chat
+        previous_messages = Message.objects.filter(chat=chat).order_by('created_at')
+        serializer.context['previous_messages'] = previous_messages
 
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
+        serializer.save(sender=sender, chat=chat)
 
-    @action(detail=False, methods=['get'], url_path='threads')
-    def list_threads(self, request):
+    @action(detail=True, methods=['get'], url_path='conversation')
+    def get_conversation(self, request, pk=None):
         """
-        Retrieve a summary of all threads involving the authenticated user.
+        Retrieve all messages in the same chat.
         """
         user = request.user
-        threads = Message.objects.filter(
-            Q(sender=user) | Q(recipient=user)
-        ).values(
-            'thread'
-        ).annotate(
-            last_message=Max('created_at'),
-            last_message_body=Max('body'),
-            unread_count=Count('id', filter=Q(recipient=user, is_read=False)),
-            participant=Max('recipient__id')
-        ).order_by('-last_message')
+        chat = Chat.objects.filter(identifier=pk).first()
+        if not chat:
+            return Response({"error": "Chat not found."}, status=status.HTTP_404_NOT_FOUND)
 
-        serializer = ThreadSummarySerializer(threads, many=True)
+        messages = Message.objects.filter(chat=chat).order_by('created_at')
+        serializer = self.get_serializer(messages, many=True)
         return Response(serializer.data)
+    
+    def destroy(self, request, *args, **kwargs):
+        """
+        Archive a message instead of deleting it.
+        """
+        instance = self.get_object()
+        if instance.recipient != request.user:
+            return Response({"error": "You cannot delete this message."}, status=status.HTTP_403_FORBIDDEN)
 
+        instance.archived = True
+        instance.save()
+        return Response({"message": "Message archived successfully."}, status=status.HTTP_204_NO_CONTENT)
+    
+    @action(detail=False, methods=['get'], url_path='unread-count')
+    def unread_count(self, request):
+        """
+        Get the count of unread messages for the logged-in user.
+        """
+        user = self.request.user
+        count = Message.objects.filter(recipient=user, is_read=False).count()
+        return Response({"unread_count": count}, status=status.HTTP_200_OK)
+    
     @action(detail=True, methods=['patch'], url_path='mark-as-read')
     def mark_as_read(self, request, pk=None):
         """
-        Mark all messages in a thread as read for the authenticated user.
+        Mark all messages in a chat as read.
         """
         user = request.user
-        messages = Message.objects.filter(thread=pk, recipient=user, is_read=False)
+        chat = Chat.objects.filter(identifier=pk).first()
+        if not chat:
+            return Response({"error": "Chat not found."}, status=status.HTTP_404_NOT_FOUND)
 
-        if not messages.exists():
-            return Response(
-                {"message": "No unread messages found in this thread."},
-                status=status.HTTP_200_OK,
-            )
-
-        messages.update(is_read=True)
-        return Response(
-            {"message": f"{messages.count()} messages marked as read."},
-            status=status.HTTP_200_OK,
-        )
-
-    def destroy(self, request, *args, **kwargs):
+        # Mark messages as read
+        Message.objects.filter(chat=chat, recipient=user, is_read=False).update(is_read=True)
+        return Response({"message": "Messages marked as read."}, status=status.HTTP_200_OK)
+    
+    def retrieve(self, request, *args, **kwargs):
         """
-        Allow only the sender or recipient to delete a message.
+        Retrieve a single message and mark it as read if the authenticated user is part of the chat.
         """
         instance = self.get_object()
-        if instance.sender != request.user and instance.recipient != request.user:
-            return Response({"error": "You are not authorized to delete this message."}, status=status.HTTP_403_FORBIDDEN)
-        self.perform_destroy(instance)
-        return Response(status=status.HTTP_204_NO_CONTENT)
+        user = request.user
+
+        # Mark the message as read only if the user is part of the chat
+        if (instance.chat.user1 == user or instance.chat.user2 == user) and not instance.is_read:
+            instance.is_read = True
+            instance.save(update_fields=["is_read"])
+
+        serializer = self.get_serializer(instance)
+        return Response(serializer.data)
+    
+    @action(detail=False, methods=['post'], url_path='admin-message')
+    def admin_message(self, request):
+        """
+        Allow superusers to send admin messages to a specific user.
+        """
+        if not request.user.is_superuser:
+            raise PermissionDenied("Only superusers can send admin messages.")
+
+        recipient_id = request.data.get("recipient_id")
+        subject = request.data.get("subject", "Admin Message")
+        body = request.data.get("body", "")
+
+        if not recipient_id:
+            return Response({"error": "Recipient ID is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        recipient = MarketUser.objects.filter(identifier=recipient_id).first()
+        if not recipient:
+            return Response({"error": "Recipient not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        message = Message.objects.create(
+            sender=request.user,
+            recipient=recipient,
+            subject=subject,
+            body=body,
+            is_admin_message=True
+        )
+
+        return Response(MessageSerializer(message).data, status=status.HTTP_201_CREATED)
+
+    @action(detail=False, methods=['post'], url_path='broadcast')
+    def broadcast_message(self, request):
+        """
+        Allow superusers to send a broadcast message to all users.
+        """
+        if not request.user.is_superuser:
+            raise PermissionDenied("Only superusers can send broadcast messages.")
+
+        subject = request.data.get("subject", "Broadcast Message")
+        body = request.data.get("body", "")
+
+        # Retrieve all users
+        users = MarketUser.objects.all()
+        messages = [
+            Message(
+                sender=request.user,
+                recipient=user,
+                subject=subject,
+                body=body,
+                is_admin_message=True
+            )
+            for user in users
+        ]
+
+        Message.objects.bulk_create(messages)
+
+        return Response({"message": "Broadcast sent successfully."}, status=status.HTTP_201_CREATED)

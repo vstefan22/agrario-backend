@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Message, Attachment
+from .models import Message, Attachment, Chat
 from accounts.models import MarketUser
 import uuid
 
@@ -8,6 +8,15 @@ class AttachmentSerializer(serializers.ModelSerializer):
     class Meta:
         model = Attachment
         fields = ['id', 'file', 'uploaded_at']
+
+    def validate_file(self, value):
+        max_size = 5 * 1024 * 1024  # 5 MB
+        allowed_types = ['application/pdf', 'image/jpeg', 'image/png']
+        if value.size > max_size:
+            raise serializers.ValidationError("File size must be under 5MB.")
+        if value.content_type not in allowed_types:
+            raise serializers.ValidationError("Unsupported file type.")
+        return value
 
 
 class SenderSerializer(serializers.ModelSerializer):
@@ -20,70 +29,65 @@ class SenderSerializer(serializers.ModelSerializer):
 
 
 class MessageSerializer(serializers.ModelSerializer):
-    """
-    Serializer for messages, including sender, recipient, and thread details.
-    """
-    sender = SenderSerializer(read_only=True)
-    recipient = serializers.UUIDField()
-    is_read = serializers.BooleanField(read_only=True)
+    recipient_id = serializers.UUIDField(write_only=True)  # For input
+    recipient = serializers.StringRelatedField(read_only=True)  # Display recipient in response
+    sender = serializers.StringRelatedField(read_only=True)  # Display sender in response
+    is_admin_message = serializers.BooleanField(read_only=True)
     attachments = AttachmentSerializer(many=True, read_only=True)
     attachment_files = serializers.ListField(
         child=serializers.FileField(),
         write_only=True,
         required=False
     )
+    previous_messages = serializers.SerializerMethodField()
 
     class Meta:
         model = Message
-        fields = [
-            'identifier', 'sender', 'recipient', 'subject', 'body',
-            'thread', 'created_at', 'is_read', 'attachments', 'attachment_files'
-        ]
-        read_only_fields = ['identifier', 'thread', 'created_at', 'sender', 'attachments']
+        fields = (
+            'identifier', 'recipient_id', 'recipient', 'sender', 
+            'subject', 'body', 'attachments', 'attachment_files', 
+            'created_at', 'is_read', 'previous_messages', 'is_admin_message'
+        )
+        read_only_fields = ['identifier', 'created_at', 'is_read', 'attachments', 'sender', 'is_admin_message']
+
+    def get_previous_messages(self, obj):
+        """
+        Retrieve previous messages from the same conversation.
+        """
+        previous_messages = self.context.get('previous_messages', [])
+        return MessageSerializer(previous_messages, many=True).data
 
     def create(self, validated_data):
-        # Extract attachment_files from validated_data
         attachment_files = validated_data.pop('attachment_files', [])
+        sender = validated_data['sender']
 
-        # Ensure the sender is included from the context (authenticated user)
-        validated_data['sender'] = self.context['request'].user
+        recipient_id = validated_data.pop('recipient_id')
+        recipient = MarketUser.objects.filter(identifier=recipient_id).first()
+        if not recipient:
+            raise serializers.ValidationError({"recipient_id": "Recipient not found."})
 
-        # Create the message object
-        message = Message.objects.create(**validated_data)
+        chat, created = Chat.objects.get_or_create(user1=sender, user2=recipient)
 
-        # Save attachments and link them to the message
+        message = Message.objects.create(chat=chat, **validated_data)
+
         for file in attachment_files:
             attachment = Attachment.objects.create(file=file)
             message.attachments.add(attachment)
 
         return message
+    
 
-    def validate_recipient(self, value):
+class ChatSerializer(serializers.ModelSerializer):
+    user1 = serializers.StringRelatedField()  # Display user1 username
+    user2 = serializers.StringRelatedField()  # Display user2 username
+    messages_count = serializers.SerializerMethodField()  # Count of messages in chat
+
+    class Meta:
+        model = Chat
+        fields = ['identifier', 'user1', 'user2', 'created_at', 'messages_count']
+
+    def get_messages_count(self, obj):
         """
-        Validate the recipient field to ensure the user exists.
+        Count messages in the chat.
         """
-        # Ensure the value is a UUID instance
-        if not isinstance(value, uuid.UUID):
-            try:
-                value = uuid.UUID(value)
-            except ValueError:
-                raise serializers.ValidationError("Recipient must be a valid UUID.")
-
-        # Check if the recipient exists in the database
-        try:
-            recipient = MarketUser.objects.get(identifier=value)
-        except MarketUser.DoesNotExist:
-            raise serializers.ValidationError("Recipient does not exist.")
-        
-        return recipient
-
-
-class ThreadSummarySerializer(serializers.Serializer):
-    """
-    Serializer to provide a summary of threads involving the user.
-    """
-    thread = serializers.UUIDField()
-    last_message = serializers.CharField()
-    last_message_time = serializers.DateTimeField()
-    unread_count = serializers.IntegerField()
-    participant = SenderSerializer()
+        return obj.messages.count()
