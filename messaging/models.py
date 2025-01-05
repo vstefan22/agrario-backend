@@ -1,15 +1,33 @@
 import uuid
 from django.db import models
 from accounts.models import MarketUser
+import logging
+from django.conf import settings
+
+logger = logging.getLogger(__name__)
 
 class Attachment(models.Model):
+    """
+    Model for storing file attachments for messages.
+    """
     file = models.FileField(upload_to="messages/attachments/")
     uploaded_at = models.DateTimeField(auto_now_add=True)
 
+
+class Chat(models.Model):
+    identifier = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user1 = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='chats_as_user1'
+    )
+    user2 = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='chats_as_user2'
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Chat {self.identifier} between {self.user1} and {self.user2}"
+
 class Message(models.Model):
-    """
-    Model representing a message between two MarketUser instances.
-    """
     SUBJECT_CHOICES = [
         ('General Inquiry', 'General Inquiry'),
         ('Auction Question', 'Auction Question'),
@@ -20,15 +38,15 @@ class Message(models.Model):
         default=uuid.uuid4,
         editable=False
     )
+    chat = models.ForeignKey(
+        'Chat',
+        on_delete=models.CASCADE,
+        related_name="messages"
+    )
     sender = models.ForeignKey(
-        MarketUser,
+        settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
         related_name="sent_messages"
-    )
-    recipient = models.ForeignKey(
-        MarketUser,
-        on_delete=models.CASCADE,
-        related_name="received_messages"
     )
     subject = models.CharField(
         max_length=64,
@@ -39,22 +57,18 @@ class Message(models.Model):
         max_length=500,
         blank=False,
     )
-    thread = models.UUIDField(
-        default=uuid.uuid4,
-        editable=False,
-        db_index=True,
-    )
-    is_admin_message = models.BooleanField(default=False)  # For admin messaging
-    created_at = models.DateTimeField(
-        auto_now_add=True,
-    )
-    read = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    is_read = models.BooleanField(default=False)
+    is_admin_message = models.BooleanField(default=False)
+    archived = models.BooleanField(default=False)
     attachments = models.ManyToManyField(
         'Attachment',
         blank=True,
         related_name='messages'
     )
 
+    class Meta:
+        ordering = ['created_at']  # Messages are ordered by creation time
 
     def __str__(self):
-        return f"Message from {self.sender} to {self.recipient} - {self.subject}"
+        return f"Message in Chat {self.chat.identifier} from {self.sender} - {self.subject}"

@@ -14,7 +14,6 @@ from dotenv import load_dotenv
 from google.oauth2 import service_account
 
 
-
 # Load environment variables
 load_dotenv()
 # django_heroku.settings(locals())
@@ -32,14 +31,23 @@ SECRET_KEY = os.getenv('SECRET_KEY')
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv("DEBUG", "False").lower() == "true"
 
+DEBUG = os.getenv("DEBUG", "False").lower() == "true"
+
 FRONTEND_URL = os.getenv('FRONTEND_URL')
 BACKEND_URL = os.getenv('BACKEND_URL')
-STRIPE_SECRET_KEY = os.getenv('STRIPE_SECRET_KEY')
+# STRIPE_SECRET_KEY = os.getenv('STRIPE_SECRET_KEY')
+# From Stripe dashboard (Test Mode)
+STRIPE_SECRET_KEY = "sk_test_51Qbmc4RnpHijSsKDQROpbHOaU6e24KCuubsUxDQ2cWe50YrWAb1q6mDWcMdT7i8IdT0Sr8F9HaOr0PBjjEDlbsfJ00MHIAXOUR"
+# From Stripe dashboard (Test Mode)
+STRIPE_PUBLISHABLE_KEY = "pk_test_51Qbmc4RnpHijSsKDaKN8ljxCHUheC8cdFyxGD7KlsmyVHVqyqS2roS32z8k4GnCu0Hcv01AXzwrEXOahXkXfBqEe00BbdYgoQdy"
+# From Stripe Webhooks (Test Mode)
+STRIPE_ENDPOINT_SECRET = "whsec_154627c69d9ff877159ef9e1e07f48f151cc1cf2a9ca38e8749512d7c988591a"
 
 ALLOWED_HOSTS = ["127.0.0.1",
                  'agrario-backend-cc0a3b9c6ae6.herokuapp.com', 'localhost']
 
-
+GDAL_LIBRARY_PATH = os.environ.get(
+    'GDAL_LIBRARY_PATH', '/app/.heroku/vendor/lib/libgdal.so')
 
 CSRF_TRUSTED_ORIGINS = [FRONTEND_URL, BACKEND_URL]
 CORS_ALLOWED_ORIGINS = [FRONTEND_URL, BACKEND_URL]
@@ -76,10 +84,17 @@ INSTALLED_APPS = [
     'rest_framework.authtoken',
     'drf_yasg',
 
+    'phonenumber_field',
+    'phonenumbers',
+
+    'psycopg2',
+
     # custom apps
     'accounts',
     'offers',
-    # 'messaging',
+    'messaging',
+    'reports',
+    'payments',
     'subscriptions',
 ]
 
@@ -158,7 +173,8 @@ if firebase_credentials_path and os.path.exists(firebase_credentials_path):
     with open(firebase_credentials_path, "r") as f:
         firebase_config = json.load(f)
 elif firebase_credentials_base64:
-    firebase_config = json.loads(base64.b64decode(firebase_credentials_base64).decode("utf-8"))
+    firebase_config = json.loads(base64.b64decode(
+        firebase_credentials_base64).decode("utf-8"))
 else:
     firebase_config = None  # Default to None to handle missing credentials
 
@@ -172,7 +188,7 @@ FIREBASE_CONFIG = firebase_config
 google_credentials_path = os.getenv("GOOGLE_CREDENTIALS_JSON_PATH")
 google_credentials_base64 = os.getenv("GOOGLE_CREDENTIALS_BASE64")
 GOOGLE_APPLICATION_CREDENTIALS = os.getenv("GOOGLE_CREDENTIALS_JSON_PATH")
-G_CLOUD_BUCKET_NAME_STATIC=os.getenv("G_CLOUD_BUCKET_NAME_STATIC")
+G_CLOUD_BUCKET_NAME_STATIC = os.getenv("G_CLOUD_BUCKET_NAME_STATIC")
 TUTORIAL_LINK_PREFIX = "tutorials/{role}/"
 try:
     if google_credentials_path and os.path.exists(google_credentials_path):
@@ -250,11 +266,13 @@ EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 EMAIL_HOST = os.getenv('EMAIL_HOST', 'smtp.gmail.com')
 EMAIL_PORT = os.getenv('EMAIL_PORT', 587)
 EMAIL_USE_TLS = os.getenv('EMAIL_USE_TLS', 'True') == 'True'
-EMAIL_USE_SSL = os.getenv('EMAIL_USE_SSL', 'False') == 'True'  # For servers requiring SSL
+# For servers requiring SSL
+EMAIL_USE_SSL = os.getenv('EMAIL_USE_SSL', 'False') == 'True'
 EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER')  # Your SMTP username
 EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD')  # Your SMTP password
 DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'noreply@yourdomain.com')
-SERVER_EMAIL = os.getenv('SERVER_EMAIL', 'errors@yourdomain.com')  # Error reporting email
+# Error reporting email
+SERVER_EMAIL = os.getenv('SERVER_EMAIL', 'errors@yourdomain.com')
 
 # Optional settings to ensure email subject prefixes
 EMAIL_SUBJECT_PREFIX = '[Agrario]'
