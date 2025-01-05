@@ -56,6 +56,10 @@ class MarketUser(AbstractUser):
         """
         return self.identifier
 
+    class Meta:
+        verbose_name = "Market User"
+        verbose_name_plural = "Market Users"
+
 
 class Landowner(MarketUser):
     """
@@ -66,6 +70,10 @@ class Landowner(MarketUser):
     """
 
     position = models.CharField(max_length=100, null=True, blank=True)
+
+    class Meta:
+        verbose_name = "Landowner"
+        verbose_name_plural = "Landowners"
 
 
 class ProjectDeveloper(MarketUser):
@@ -79,6 +87,10 @@ class ProjectDeveloper(MarketUser):
 
     company_name = models.CharField(max_length=255, null=True, blank=True)
     company_website = models.URLField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = "Project Developer"
+        verbose_name_plural = "Project Developers"
 
 
 class InviteLink(models.Model):

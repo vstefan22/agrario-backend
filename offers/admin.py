@@ -31,9 +31,9 @@ class ParcelAdmin(admin.ModelAdmin):
     Admin configuration for the Parcel model.
     """
 
-    list_display = ("id", "owner", "landuse", "area")
-    search_fields = ("owner__username", "landuse__name")
-    list_filter = ("landuse",)
+    list_display = ("id", "state_name", "district_name", "municipality_name")
+    search_fields = ("district_name", "state_name")
+    list_filter = ("state_name",)
 
 
 @admin.register(AreaOffer)
