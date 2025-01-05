@@ -25,32 +25,43 @@ class Landuse(models.Model):
 
 class Parcel(models.Model):
     """
-    Model representing a parcel of land.
+    Defines the geometry of areas of land that landowners want to put on the marketplace.
 
     Attributes:
-        owner: The user who owns the parcel.
-        landuse: The land use category for the parcel.
-        area: The size of the parcel in square meters.
-        coordinates: Geo-coordinates or additional spatial data.
-        status: The current status of the parcel (e.g., draft, active).
-        created_at: The timestamp when the parcel was created.
+        state_name: Name of the state where the parcel is located.
+        district_name: Name of the district where the parcel is located.
+        municipality_name: Name of the municipality.
+        cadastral_area: Cadastral area of the parcel.
+        cadastral_sector: Cadastral sector of the parcel.
+        plot_number_main: Main plot number.
+        plot_number_secondary: Secondary plot number.
+        land_use: Description of land usage.
+        area_square_meters: Area of the parcel in square meters.
+        appear_in_offer: Foreign key linking to an AreaOffer.
+        created_by: User who created the parcel.
+        created_at: Timestamp when the parcel was created.
     """
 
-    owner = models.ForeignKey(
-        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="parcels"
+    state_name = models.CharField(max_length=64)
+    district_name = models.CharField(max_length=64)
+    municipality_name = models.CharField(max_length=64)
+    cadastral_area = models.CharField(max_length=64)
+    cadastral_sector = models.CharField(max_length=64)
+    plot_number_main = models.CharField(max_length=8, null=True)
+    plot_number_secondary = models.CharField(max_length=8)
+    land_use = models.CharField(max_length=255)
+    area_square_meters = models.DecimalField(max_digits=12, decimal_places=2)
+
+    appear_in_offer = models.ForeignKey(
+        "AreaOffer", related_name="parcels", on_delete=models.SET_NULL, null=True
     )
-    landuse = models.CharField(max_length=100, blank=True, null=True)
-    area = models.FloatField()  # Area in square meters
-    coordinates = models.JSONField()  # Additional geo-coordinates if needed
-    status = models.CharField(
-        max_length=20,
-        choices=[("draft", "Draft"), ("active", "Active")],
-        default="draft",
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="created_parcels"
     )
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        return f"Parcel owned by {self.owner} ({self.area} sqm)"
+        return f"Parcel in {self.state_name}, {self.district_name}"
 
 
 class AreaOffer(models.Model):
@@ -66,7 +77,8 @@ class AreaOffer(models.Model):
         created_at: The timestamp when the offer was created.
     """
 
-    parcel = models.ForeignKey(Parcel, on_delete=models.CASCADE, related_name="offers")
+    parcel = models.ForeignKey(
+        Parcel, on_delete=models.CASCADE, related_name="offers")
     price = models.DecimalField(max_digits=10, decimal_places=2)
     bidding_conditions = models.JSONField(null=True, blank=True)
     documents = models.ManyToManyField(
@@ -144,11 +156,9 @@ class Report(models.Model):
     parcel = models.ForeignKey(
         Parcel, on_delete=models.CASCADE, related_name="reports", null=True, blank=True
     )
-    calculation_result = models.JSONField()  # Store calculation output as JSON
+    calculation_result = models.JSONField()
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        return (
-            f"Report for Parcel ID {self.parcel.id if self.parcel else 'Unknown'}"
-            f"created at {self.created_at}"
-            )
+        parcel_id = self.parcel.id if self.parcel else "Unknown"
+        return f"Report for Parcel ID {parcel_id} created at {self.created_at}"
