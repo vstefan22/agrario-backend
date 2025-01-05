@@ -40,7 +40,7 @@ jobs:
           gdalinfo --version
           gdal-config --version
           whereis gdal-config
-          find / -name "gdal-config"
+          find /usr/lib /usr/local/lib -name "libgdal*" || echo "GDAL files not found in /usr/lib or /usr/local/lib"
 
       - name: Set GDAL Environment Variables
         run: |
