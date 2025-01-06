@@ -263,15 +263,36 @@ class ParcelViewSet(viewsets.ModelViewSet):
         Add a parcel to the basket for analysis.
         """
         try:
+            # Ensure the parcel exists
             parcel = self.get_object()
-            user_email = request.user_email
+            
+            # Ensure the user is authenticated and retrieve their email
+            user_email = getattr(request, "user_email", None)
+            if not user_email:
+                return Response({"error": "User email not found. Authentication is required."}, status=status.HTTP_401_UNAUTHORIZED)
+
+            # Initialize the basket if it does not exist for the user
             if user_email not in self.basket:
                 self.basket[user_email] = []
+
+            # Add the parcel to the basket if not already present
             if parcel.id not in self.basket[user_email]:
                 self.basket[user_email].append(parcel.id)
-            return Response({"message": "Parcel added to basket."}, status=status.HTTP_200_OK)
+                return Response({"message": "Parcel added to basket."}, status=status.HTTP_200_OK)
+            else:
+                return Response({"message": "Parcel is already in the basket."}, status=status.HTTP_400_BAD_REQUEST)
+
         except Parcel.DoesNotExist:
+            # Handle case where the parcel does not exist
             return Response({"error": "Parcel not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        except AttributeError as e:
+            # Handle case where `self.basket` is not defined or initialized
+            return Response({"error": f"Basket attribute error: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        except Exception as e:
+            # Generic error handling for unexpected exceptions
+            return Response({"error": f"An unexpected error occurred: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         
     @action(detail=True, methods=["post"], permission_classes=[FirebaseIsAuthenticated])
     def remove_from_basket(self, request, pk=None):
