@@ -145,7 +145,7 @@ if DEBUG:
     }
 else:
     DATABASES = {
-        'default': dj_database_url.config()
+        'default': dj_database_url.config(engine='django.contrib.gis.db.backends.postgis')
     }
 AUTH_USER_MODEL = 'accounts.MarketUser'
 # Load Firebase credentials
