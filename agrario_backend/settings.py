@@ -73,11 +73,15 @@ INSTALLED_APPS = [
     'corsheaders',
     'rest_framework.authtoken',
     'drf_yasg',
+    'django_filters',
 
     # custom apps
     'accounts',
     'offers',
     'subscriptions',
+    'payments',
+    'reports',
+    'messaging',
 ]
 
 MIDDLEWARE = [
@@ -127,11 +131,11 @@ WSGI_APPLICATION = "agrario_backend.wsgi.application"
 
 
 # Database
-if (DEBUG):
+if DEBUG:
     # POSTGRESQL
     DATABASES = {
         'default': {
-            'ENGINE': 'django.db.backends.postgresql',
+            'ENGINE': 'django.contrib.gis.db.backends.postgis',
             'NAME': os.getenv("DATABASE_NAME"),
             'USER': os.getenv("DATABASE_USER"),
             'PASSWORD': os.getenv("DATABASE_PASSWORD"),
@@ -143,26 +147,26 @@ else:
     DATABASES = {
         'default': dj_database_url.config()
     }
-
 AUTH_USER_MODEL = 'accounts.MarketUser'
+# Load Firebase credentials
 firebase_credentials_path = os.getenv("FIREBASE_CREDENTIALS_JSON_PATH")
 firebase_credentials_base64 = os.getenv("FIREBASE_CREDENTIALS_BASE64")
 
-try:
-    if firebase_credentials_path and os.path.exists(firebase_credentials_path):
-        # Use the credentials file if it exists
-        with open(firebase_credentials_path, "r") as f:
-            credentials_info = json.load(f)
-    elif firebase_credentials_base64:
-        # Decode the Base64 string into JSON
-        credentials_info = json.loads(
-            base64.b64decode(firebase_credentials_base64).decode("utf-8")
-        )
-    else:
-        raise Exception("Firebase credentials not provided.")
-except Exception as e:
-    logging.error(f"Error loading Firebase credentials: {e}")
-    raise
+FIREBASE_API_KEY = os.getenv("FIREBASE_API_KEY", "your_firebase_api_key_here")
+
+if firebase_credentials_path and os.path.exists(firebase_credentials_path):
+    with open(firebase_credentials_path, "r") as f:
+        firebase_config = json.load(f)
+elif firebase_credentials_base64:
+    firebase_config = json.loads(base64.b64decode(firebase_credentials_base64).decode("utf-8"))
+else:
+    firebase_config = None  # Default to None to handle missing credentials
+
+if firebase_config is None:
+    raise Exception("Firebase credentials are not provided.")
+
+# Make firebase_config available to other parts of the app
+FIREBASE_CONFIG = firebase_config
 
 
 # GOOGLE CLOUD
@@ -208,6 +212,9 @@ STORAGES = {
         },
     },
 }
+
+GDAL_LIBRARY_PATH = r"C:\Users\gacic\anaconda3\envs\agrario_env\Library\bin\gdal.dll"
+GEOS_LIBRARY_PATH  = r"C:\Users\gacic\anaconda3\envs\agrario_env\Library\bin\geos_c.dll"
 
 # Static files configuration
 STATIC_URL = "static/"
