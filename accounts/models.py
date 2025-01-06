@@ -92,6 +92,8 @@ class MarketUser(AbstractUser):
         max_length=20, choices=ROLE_CHOICES, default="landowner")
     reset_code = models.CharField(max_length=6, null=True, blank=True)
     reset_code_created_at = models.DateTimeField(null=True, blank=True)
+    privacy_accepted = models.BooleanField(default=False)
+    terms_accepted = models.BooleanField(default=False)
 
     USERNAME_FIELD = "email"
     REQUIRED_FIELDS = ['first_name', 'last_name', 'company_name', 'address', 'zipcode', 'city', 'phone_number']
