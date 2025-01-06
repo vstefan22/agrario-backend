@@ -110,6 +110,7 @@ class RegisterWithInviteView(APIView):
                 amount_percent=10,
                 is_active=True
             )
+            self.send_promo_code_email(invite.created_by, promo_code.code)
 
             return Response({"message": "User registered successfully.", "promo_code": promo_code.code}, status=status.HTTP_201_CREATED)
 
@@ -118,6 +119,22 @@ class RegisterWithInviteView(APIView):
 
         except IntegrityError as e:
             return Response({"error": "An unexpected database error occurred."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+    def send_promo_code_email(self, user, promo_code):
+        """
+        Sends the promo code to the inviter via email.
+        """
+        try:
+            send_mail(
+                subject="Your Promo Code from Agrario",
+                message=f"Hi {user.first_name},\n\nThank you for inviting a new user! Here is your promo code: {promo_code}.\n\nYou can redeem this code in your account.\n\nBest regards,\nThe Agrario Team",
+                from_email=settings.EMAIL_HOST_USER,
+                recipient_list=[user.email],
+                fail_silently=False,
+            )
+        except Exception as e:
+            # Log or handle the exception
+            print(f"Failed to send promo code email to {user.email}: {str(e)}")
 
 
 
