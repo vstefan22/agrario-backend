@@ -103,6 +103,8 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
             "zipcode",
             "city",
             "street_housenumber",
+            "privacy_accepted",
+            "terms_accepted",
         ]
         extra_kwargs = {
             "email": {"required": True},

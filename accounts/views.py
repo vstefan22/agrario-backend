@@ -149,6 +149,8 @@ class MarketUserViewSet(viewsets.ModelViewSet):
                 )
             user.is_email_confirmed = True
             user.is_active = True
+            user.privacy_accepted = True
+            user.terms_accepted = True
             user.save()
             return Response(
                 {"message": "Your account has been confirmed successfully. You can log in now."},
