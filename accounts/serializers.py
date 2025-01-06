@@ -157,8 +157,6 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
         return user
 
     def send_confirmation_email(self, user):
-
-    def send_confirmation_email(self, user):
         """
         Generate and send an email confirmation link to the user.
         """
@@ -167,13 +165,11 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
 
         token = default_token_generator.make_token(user)
         uid = urlsafe_base64_encode(force_bytes(user.pk))
-        confirmation_link = f"{settings.BACKEND_URL}{
-            reverse('confirm-email', kwargs={'uidb64': uid, 'token': token})}"
+        confirmation_link = f"{settings.BACKEND_URL}{reverse('confirm-email', kwargs={'uidb64': uid, 'token': token})}"
 
         send_mail(
             subject="Confirm Your Email Address",
-            message=f"Hi {user.first_name},\n\nClick the link below to confirm your email:\n{
-                confirmation_link}",
+            message=f"Hi {user.first_name},\n\nClick the link below to confirm your email:\n{confirmation_link}",
             from_email=settings.EMAIL_HOST_USER,
             recipient_list=[user.email],
         )
