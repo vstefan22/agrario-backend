@@ -85,6 +85,7 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
     """
     Serializer for user registration with mandatory field validation.
     """
+    confirm_password = serializers.CharField(write_only=True, required=True)  # Explicitly declare it here
     invite_code = serializers.CharField(write_only=True, required=False)
     role = serializers.ChoiceField(choices=MarketUser.ROLE_CHOICES)
 
@@ -117,9 +118,9 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
         Validate that mandatory fields are filled.
         """
         # Validate password confirmation
-        if attrs["password"] != attrs.pop("confirm_password", None):
+        if attrs["password"] != self.initial_data.get("confirm_password"):
             raise serializers.ValidationError({"password": "Passwords do not match."})
-        
+
         mandatory_fields = ["email", "password", "role"]
         if attrs.get("role") == "landowner":
             mandatory_fields.extend(["phone_number", "address", "zipcode", "city", "street_housenumber"])

@@ -418,6 +418,34 @@ class RoleDashboardView(APIView):
             ),
         },
     )
+    
+    def get_landowner_data(self, user):
+        """
+        Fetch additional dashboard data for landowners.
+        """
+        parcels_owned = user.created_parcels.count()  # Use the correct related_name
+        parcels_pending_analysis = user.created_parcels.filter(status="pending_analysis").count()
+        notifications = []  # Add logic for notifications if required
+
+        return {
+            "parcels_owned": parcels_owned,
+            "parcels_pending_analysis": parcels_pending_analysis,
+            "notifications": notifications,
+        }
+    
+    def get_developer_data(self, user):
+        """
+        Fetch additional dashboard data for developers.
+        """
+        active_projects = user.projects.filter(status="active").count()  # Assuming `projects` is a related name
+        projects_pending_approval = user.projects.filter(status="pending_approval").count()
+        notifications = []  # Fetch notifications if implemented
+
+        return {
+            "active_projects": active_projects,
+            "projects_pending_approval": projects_pending_approval,
+            "notifications": notifications,
+        }
     def get(self, request):
         """
         Retrieve dashboard data based on the user's role and include tutorial links.
@@ -428,7 +456,7 @@ class RoleDashboardView(APIView):
 
         token = auth_header.split("Bearer ")[1]
         decoded_token = verify_firebase_token(token)
-        
+
         if not decoded_token:
             logger.warning("Failed to decode token or token expired.")
             return Response({"error": "Invalid or expired Firebase token."}, status=status.HTTP_401_UNAUTHORIZED)
@@ -442,19 +470,25 @@ class RoleDashboardView(APIView):
         if not user.is_active:
             return Response({"error": "User account is inactive."}, status=status.HTTP_403_FORBIDDEN)
 
-        # Fallback to user model's role if not in the token
-        # role = decoded_token.get("role") or user.role
+        # Fetch user role and tutorial links
         role = get_user_role(decoded_token, email)
-
-        # Use the first part of the email as a placeholder for the username if it's None
         username = user.first_name or email.split("@")[0]
         tutorial_links = self.get_tutorial_links(role)
-        dashboard_greeting = f"Welcome {role} {username}!"
 
+        # Fetch role-specific data
+        if role == "landowner":
+            role_data = self.get_landowner_data(user)
+        elif role == "developer":
+            role_data = self.get_developer_data(user)
+        else:
+            role_data = {}
+
+        dashboard_greeting = f"Welcome {role.capitalize()} {username}!"
         dashboard_data = {
             "dashboard_greeting": dashboard_greeting,
             "tutorial_links": tutorial_links,
             "role": role,
+            **role_data,
         }
 
         return Response(dashboard_data, status=status.HTTP_200_OK)
