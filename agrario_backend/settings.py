@@ -78,8 +78,8 @@ INSTALLED_APPS = [
     # custom apps
     'accounts',
     'offers',
-    'subscriptions',
     'payments',
+    'subscriptions',
     'reports',
     'messaging',
 ]
