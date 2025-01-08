@@ -65,6 +65,8 @@ class MarketUser(AbstractUser):
         editable=False
     )
     email = models.EmailField(unique=True)
+    firstname = models.CharField(max_length=255)
+    lastname = models.CharField(max_length=255)
     phone_number = PhoneNumberField(
         region="DE", max_length=20, blank=True, null=True)
     address = models.CharField(max_length=255, null=True, blank=True)
@@ -81,13 +83,13 @@ class MarketUser(AbstractUser):
     reset_code_created_at = models.DateTimeField(null=True, blank=True)
 
     USERNAME_FIELD = "email"
-    REQUIRED_FIELDS = ['first_name', 'last_name', 'company_name',
+    REQUIRED_FIELDS = ['firstname', 'lastname', 'company_name',
                        'address', 'zipcode', 'city', 'phone_number']
 
     objects = MarketUserManager()
 
     def __str__(self):
-        return f"{self.first_name} {self.last_name} ({self.get_role_display()})"
+        return f"{self.firstname} {self.lastname} ({self.get_role_display()})"
 
     @property
     def id(self):
