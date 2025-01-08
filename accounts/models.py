@@ -73,7 +73,6 @@ class MarketUser(AbstractUser):
     profile_picture = models.FileField(
         upload_to="profile_pictures/", blank=True)
     city = models.CharField(max_length=50, null=True)
-    street_housenumber = models.CharField(max_length=50, null=True)
     zipcode = models.CharField(max_length=5)
     is_email_confirmed = models.BooleanField(default=False)
     role = models.CharField(
