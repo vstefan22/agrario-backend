@@ -36,8 +36,8 @@ class UserSerializer(serializers.ModelSerializer):
         model = MarketUser
         fields = [
             "id",
-            "first_name",
-            "last_name",
+            "firstname",
+            "lastname",
             "email",
             "phone_number",
             "address",
@@ -92,6 +92,8 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
     class Meta:
         model = MarketUser
         fields = [
+            "firstname",
+            "lastname",
             "email",
             "password",
             "invite_code",
@@ -141,6 +143,8 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
         role = validated_data.pop("role", "landowner")
         user = MarketUser.objects.create_user(
             email=validated_data["email"],
+            firstname=validated_data["firstname"],
+            lastname=validated_data["lastname"],
             password=validated_data["password"],
             role=role,
             phone_number=validated_data.get("phone_number"),
@@ -166,7 +170,7 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
 
         send_mail(
             subject="Confirm Your Email Address",
-            message=f"Hi {user.first_name},\n\nClick the link below to confirm your email:\n{confirmation_link}",
+            message=f"Hi {user.firstname},\n\nClick the link below to confirm your email:\n{confirmation_link}",
             from_email=settings.EMAIL_HOST_USER,
             recipient_list=[user.email],
         )
@@ -252,8 +256,8 @@ class LandownerProfileSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "profile_picture",
-            "first_name",
-            "last_name",
+            "firstname",
+            "lastname",
             "email",
             "phone_number",
             "address",
@@ -274,8 +278,8 @@ class DeveloperProfileSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "profile_picture",
-            "first_name",
-            "last_name",
+            "firstname",
+            "lastname",
             "email",
             "phone_number",
             "address",
