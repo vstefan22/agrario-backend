@@ -104,7 +104,6 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
             "profile_picture",
             "zipcode",
             "city",
-            "street_housenumber",
         ]
         extra_kwargs = {
             "email": {"required": True},
@@ -118,7 +117,7 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
         mandatory_fields = ["email", "password", "role"]
         if attrs.get("role") == "landowner":
             mandatory_fields.extend(
-                ["phone_number", "address", "zipcode", "city", "street_housenumber"])
+                ["phone_number", "address", "zipcode", "city"])
         elif attrs.get("role") == "developer":
             mandatory_fields.extend(["company_name", "company_website"])
 
@@ -152,7 +151,6 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
             profile_picture=validated_data.get("profile_picture"),
             zipcode=validated_data.get("zipcode"),
             city=validated_data.get("city"),
-            street_housenumber=validated_data.get("street_housenumber"),
         )
         return user
 
