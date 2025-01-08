@@ -291,17 +291,16 @@ class LoginView(APIView):
                 {"error": "Please confirm your email address before logging in."},
                 status=status.HTTP_403_FORBIDDEN,
             )
+        
+        user_data = UserSerializer(user).data
 
         # Return the Firebase token and user details
         return Response(
             {
                 "message": "Login successful",
-                "user": {
-                    "email": user.email,
-                    "firebase_uid": user_record.uid,
-                    "db_uid": user.id
-                },
+                "firebase_uid": user_record.uid,
                 "firebase_token": firebase_token,
+                "user": user_data,
             },
             status=status.HTTP_200_OK,
         )
