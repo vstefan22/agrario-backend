@@ -96,7 +96,7 @@ class MarketUserViewSet(viewsets.ModelViewSet):
         confirmation_link = f"{settings.BACKEND_URL}/api/accounts/users/confirm-email/{uid}/{token}/"
         send_mail(
             subject="Confirm Your Email Address",
-            message=f"Hi {user.first_name},\n\nClick the link below to confirm your email:\n{confirmation_link}",
+            message=f"Hi {user.firstname},\n\nClick the link below to confirm your email:\n{confirmation_link}",
             from_email=settings.EMAIL_HOST_USER,
             recipient_list=[user.email],
         )
@@ -444,7 +444,7 @@ class RoleDashboardView(APIView):
         role = get_user_role(decoded_token, email)
 
         # Use the first part of the email as a placeholder for the username if it's None
-        username = user.first_name or email.split("@")[0]
+        username = user.firstname or email.split("@")[0]
         tutorial_links = self.get_tutorial_links(role)
         dashboard_greeting = f"Welcome {role} {username}!"
 
