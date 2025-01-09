@@ -45,6 +45,11 @@ class UserSerializer(serializers.ModelSerializer):
             "is_email_confirmed",
             "password",
             "confirm_password",
+            "company_name",
+            "company_website",
+            "city",
+            "zipcode",
+            "profile_picture"
         ]
         read_only_fields = ["id", "is_email_confirmed", "role"]
 
@@ -255,16 +260,20 @@ class LandownerProfileSerializer(serializers.ModelSerializer):
         model = Landowner
         fields = [
             "id",
-            "profile_picture",
             "firstname",
             "lastname",
             "email",
             "phone_number",
             "address",
-            "zipcode",
-            "city",
-            "position",  # Landowner-specific attribute
+            "role",
             "is_email_confirmed",
+            "password",
+            "company_name",
+            "company_website",
+            "city",
+            "zipcode",
+            "profile_picture",
+            "position"
         ]
         read_only_fields = ["id", "email", "is_email_confirmed"]
 
