@@ -36,6 +36,7 @@ urlpatterns = [
     path("api/messaging/", include("messaging.urls")),
     path("api/reports/", include("reports.urls")),
     path("api/payments/", include("payments.urls")),
+    path("api/invites/", include("invites.urls")),
     path(
         "swagger/",
         SchemaView.with_ui("swagger", cache_timeout=0),

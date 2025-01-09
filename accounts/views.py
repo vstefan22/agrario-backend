@@ -149,6 +149,8 @@ class MarketUserViewSet(viewsets.ModelViewSet):
                 )
             user.is_email_confirmed = True
             user.is_active = True
+            user.privacy_accepted = True
+            user.terms_accepted = True
             user.save()
             return Response(
                 {"message": "Your account has been confirmed successfully. You can log in now."},
@@ -415,6 +417,34 @@ class RoleDashboardView(APIView):
             ),
         },
     )
+    
+    def get_landowner_data(self, user):
+        """
+        Fetch additional dashboard data for landowners.
+        """
+        parcels_owned = user.created_parcels.count()  # Use the correct related_name
+        parcels_pending_analysis = user.created_parcels.filter(status="pending_analysis").count()
+        notifications = []  # Add logic for notifications if required
+
+        return {
+            "parcels_owned": parcels_owned,
+            "parcels_pending_analysis": parcels_pending_analysis,
+            "notifications": notifications,
+        }
+    
+    def get_developer_data(self, user):
+        """
+        Fetch additional dashboard data for developers.
+        """
+        active_projects = user.projects.filter(status="active").count()  # Assuming `projects` is a related name
+        projects_pending_approval = user.projects.filter(status="pending_approval").count()
+        notifications = []  # Fetch notifications if implemented
+
+        return {
+            "active_projects": active_projects,
+            "projects_pending_approval": projects_pending_approval,
+            "notifications": notifications,
+        }
     def get(self, request):
         """
         Retrieve dashboard data based on the user's role and include tutorial links.
@@ -425,7 +455,7 @@ class RoleDashboardView(APIView):
 
         token = auth_header.split("Bearer ")[1]
         decoded_token = verify_firebase_token(token)
-        
+
         if not decoded_token:
             logger.warning("Failed to decode token or token expired.")
             return Response({"error": "Invalid or expired Firebase token."}, status=status.HTTP_401_UNAUTHORIZED)
@@ -439,19 +469,25 @@ class RoleDashboardView(APIView):
         if not user.is_active:
             return Response({"error": "User account is inactive."}, status=status.HTTP_403_FORBIDDEN)
 
-        # Fallback to user model's role if not in the token
-        # role = decoded_token.get("role") or user.role
+        # Fetch user role and tutorial links
         role = get_user_role(decoded_token, email)
-
-        # Use the first part of the email as a placeholder for the username if it's None
-        username = user.firstname or email.split("@")[0]
+        username = user.first_name or email.split("@")[0]
         tutorial_links = self.get_tutorial_links(role)
-        dashboard_greeting = f"Welcome {role} {username}!"
 
+        # Fetch role-specific data
+        if role == "landowner":
+            role_data = self.get_landowner_data(user)
+        elif role == "developer":
+            role_data = self.get_developer_data(user)
+        else:
+            role_data = {}
+
+        dashboard_greeting = f"Welcome {role.capitalize()} {username}!"
         dashboard_data = {
             "dashboard_greeting": dashboard_greeting,
             "tutorial_links": tutorial_links,
             "role": role,
+            **role_data,
         }
 
         return Response(dashboard_data, status=status.HTTP_200_OK)
@@ -460,71 +496,127 @@ class MarketUserProfileView(viewsets.ViewSet):
     """
     ViewSet for managing MarketUser profiles, dynamically choosing serializers based on user role.
     """
+
     permission_classes = [IsAuthenticated]
 
-    def get_serializer_class(self, user):
+    @staticmethod
+    def get_serializer_class(user):
         """
         Dynamically select the serializer based on the user's role.
+
+        Args:
+            user (MarketUser): The authenticated user.
+
+        Returns:
+            Serializer class based on the user's role or None if unsupported.
         """
         if user.role == "landowner":
             return LandownerProfileSerializer
-        elif user.role == "developer":
+        if user.role == "developer":
             return DeveloperProfileSerializer
         return None
 
-    def get_user(self, request):
+    @staticmethod
+    def get_authenticated_user(request):
         """
         Retrieve the authenticated user based on the Firebase token.
+
+        Args:
+            request: The HTTP request object.
+
+        Returns:
+            MarketUser instance or Response with error message.
         """
         auth_header = request.headers.get("Authorization")
         if not auth_header or not auth_header.startswith("Bearer "):
-            return Response({"error": "Authentication token not provided."}, status=401)
+            return Response({"error": "Authentication token not provided."}, status=status.HTTP_401_UNAUTHORIZED)
 
         token = auth_header.split("Bearer ")[1]
         decoded_token = verify_firebase_token(token)
         if not decoded_token:
-            return Response({"error": "Invalid or expired Firebase token."}, status=401)
+            return Response({"error": "Invalid or expired Firebase token."}, status=status.HTTP_401_UNAUTHORIZED)
 
         email = decoded_token.get("email")
         if not email:
-            return Response({"error": "Email not found in token."}, status=401)
+            return Response({"error": "Email not found in token."}, status=status.HTTP_401_UNAUTHORIZED)
 
         try:
             return MarketUser.objects.get(email=email)
         except MarketUser.DoesNotExist:
-            return Response({"error": "User does not exist."}, status=404)
+            return Response({"error": "User does not exist."}, status=status.HTTP_404_NOT_FOUND)
+        
+    @swagger_auto_schema(
+        operation_summary="Retrieve User Profile",
+        operation_description="Get profile details of the authenticated user based on their role.",
+        responses={
+            200: openapi.Response(description="User profile data", examples={"application/json": {"key": "value"}}),
+            401: openapi.Response(description="Authentication token not provided or invalid"),
+            404: openapi.Response(description="User not found"),
+        },
+    )
 
     def retrieve(self, request, *args, **kwargs):
         """
         Retrieve the profile details of the authenticated user.
+
+        Args:
+            request: The HTTP request object.
+
+        Returns:
+            Response containing the user's profile data or an error message.
         """
-        user = self.get_user(request)
+        user = self.get_authenticated_user(request)
         if isinstance(user, Response):
             return user
 
         serializer_class = self.get_serializer_class(user)
         if not serializer_class:
-            return Response({"error": "Unsupported role."}, status=400)
+            return Response({"error": "Unsupported role."}, status=status.HTTP_400_BAD_REQUEST)
 
         serializer = serializer_class(user)
-        return Response(serializer.data, status=200)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    
+    @swagger_auto_schema(
+        operation_summary="Update User Profile",
+        operation_description="Update profile details of the authenticated user based on their role.",
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            properties={
+                "first_name": openapi.Schema(type=openapi.TYPE_STRING, description="First name"),
+                "last_name": openapi.Schema(type=openapi.TYPE_STRING, description="Last name"),
+                "phone_number": openapi.Schema(type=openapi.TYPE_STRING, description="Phone number"),
+                "address": openapi.Schema(type=openapi.TYPE_STRING, description="Address"),
+            },
+        ),
+        responses={
+            200: openapi.Response(description="Profile updated successfully"),
+            401: openapi.Response(description="Authentication token not provided or invalid"),
+            400: openapi.Response(description="Validation errors or unsupported role"),
+        },
+    )
 
     def partial_update(self, request, *args, **kwargs):
         """
         Update the profile details of the authenticated user.
+
+        Args:
+            request: The HTTP request object.
+
+        Returns:
+            Response containing the updated profile data or an error message.
         """
-        user = self.get_user(request)
+        user = self.get_authenticated_user(request)
         if isinstance(user, Response):
             return user
 
         serializer_class = self.get_serializer_class(user)
         if not serializer_class:
-            return Response({"error": "Unsupported role."}, status=400)
+            return Response({"error": "Unsupported role."}, status=status.HTTP_400_BAD_REQUEST)
 
         serializer = serializer_class(user, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         serializer.save()
-        return Response(serializer.data, status=200)
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
 
 
@@ -561,30 +653,7 @@ class FirebasePasswordResetRequestView(APIView):
             ),
         },
     )
-    # def post(self, request):
-    #     """
-    #     Sends a password reset email to the user using Firebase.
-    #     """
-    #     email = request.data.get("email")
-    #     if not email:
-    #         return Response({"error": "Email is required."}, status=status.HTTP_400_BAD_REQUEST)
-
-    #     firebase_api_key = settings.FIREBASE_API_KEY
-    #     url = f"https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key={firebase_api_key}"
-
-    #     payload = {
-    #         "requestType": "PASSWORD_RESET",
-    #         "email": email,
-    #     }
-
-    #     response = requests.post(url, json=payload)
-    #     if response.status_code == 200:
-    #         return Response({"message": "Password reset email sent successfully."}, status=status.HTTP_200_OK)
-
-    #     return Response(
-    #         {"error": "Failed to send password reset email. Please check the email address."},
-    #         status=status.HTTP_400_BAD_REQUEST,
-    #     )
+ 
     def post(self, request):
         email = request.data.get("email")
 

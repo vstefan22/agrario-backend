@@ -33,7 +33,11 @@ DEBUG = os.getenv("DEBUG", "False").lower() == "true"
 
 FRONTEND_URL = os.getenv('FRONTEND_URL')
 BACKEND_URL = os.getenv('BACKEND_URL')
+
+# Stripe
 STRIPE_SECRET_KEY = os.getenv('STRIPE_SECRET_KEY')
+STRIPE_PUBLISHABLE_KEY = os.getenv('STRIPE_PUBLISHABLE_KEY')
+STRIPE_ENDPOINT_SECRET = os.getenv('STRIPE_ENDPOINT_SECRET')
 
 ALLOWED_HOSTS = ["127.0.0.1",
                  'agrario-backend-cc0a3b9c6ae6.herokuapp.com', 'localhost']
@@ -82,6 +86,9 @@ INSTALLED_APPS = [
     'payments',
     'reports',
     'messaging',
+    'reports',
+    'payments',
+    'invites',
 ]
 
 MIDDLEWARE = [
@@ -129,6 +136,7 @@ WSGI_APPLICATION = "agrario_backend.wsgi.application"
 
 # Database
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
+
 
 
 # Database
