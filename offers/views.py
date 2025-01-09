@@ -413,11 +413,11 @@ class ParcelViewSet(viewsets.ModelViewSet):
         try:
             # Get the parcel object
             parcel = self.get_object()
-            user_email = request.user_email  # Retrieve user email from the Firebase authentication
+            user_email = request.user_email
             user = MarketUser.objects.get(email=user_email)
 
             # Check if the user has purchased the "Analyse Plus" report
-            report_purchased = Report.objects.filter(parcels=parcel, visible_for="USER").exists()
+            report_purchased = Report.objects.filter(parcel=parcel, visible_for="USER", purchase_type="analyse_plus").exists()
 
             # Prepare the response data
             data = {
@@ -442,12 +442,14 @@ class ParcelViewSet(viewsets.ModelViewSet):
                 },
             }
 
+            if not report_purchased:
+                data["error"] = "Analyse Plus needs to be purchased to access these details."
+
             return Response(data, status=status.HTTP_200_OK)
         except Parcel.DoesNotExist:
             return Response({"error": "Parcel does not exist."}, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
 
     def get_queryset(self):
         """
