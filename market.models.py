@@ -34,7 +34,8 @@ class Ternary(models.TextChoices):
 
 
 class MarketUser(models.Model):
-    identifier = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    identifier = models.UUIDField(
+        primary_key=True, default=uuid.uuid4, editable=False)
 
     name = models.CharField(max_length=50)
 
@@ -51,7 +52,8 @@ class MarketUser(models.Model):
 
     # Maximum phone number length is 15
     # https://en.wikipedia.org/wiki/E.164
-    phonenumber = PhoneNumberField(region="DE", max_length=20, blank=True, null=True)
+    phonenumber = PhoneNumberField(
+        region="DE", max_length=20, blank=True, null=True)
 
     town = models.CharField(max_length=50, null=True)
 
@@ -65,13 +67,15 @@ class MarketUser(models.Model):
 
     confirmed_at = models.DateTimeField(null=True)
 
-    signed_up_via = models.OneToOneField("InviteLink", on_delete=models.SET_NULL)
+    signed_up_via = models.OneToOneField(
+        "InviteLink", on_delete=models.SET_NULL)
 
     # NOTE here the hubspot integration is missing, will include an id or model-reference here for tracking users pushed to hubspot
 
 
 class Technology(models.Model):
-    identifier = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    identifier = models.UUIDField(
+        primary_key=True, default=uuid.uuid4, editable=False)
     title = models.CharField(max_length=50, blank=False)
 
 
@@ -194,7 +198,8 @@ class AreaOffer(models.Model):
     Note document_others relation via AreaOfferDocument
     """
 
-    identifier = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    identifier = models.UUIDField(
+        primary_key=True, default=uuid.uuid4, editable=False)
 
     # six digit field
     offer_number = models.PositiveIntegerField(auto_created=True)
@@ -208,7 +213,8 @@ class AreaOffer(models.Model):
         ACTIVE = "A", _("Aktiv")
         INACTIVE = "I", _("Inaktiv")
 
-    status = models.TextChoices(choices=OfferStatus, default=OfferStatus.IN_PREPERATION)
+    status = models.TextChoices(
+        choices=OfferStatus, default=OfferStatus.IN_PREPERATION)
 
     hide_from_search = models.BooleanField(default=False)
 
@@ -282,7 +288,8 @@ class AreaOfferDocuments(models.Model):
 class AreaOfferConfirmation(models.Model):
     """Provides offer criteria by the projectdeveloper"""
 
-    identifier = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    identifier = models.UUIDField(
+        primary_key=True, default=uuid.uuid4, editable=False)
 
     class LandownerUtilization(models.TextChoices):
         SALE = "SA", _("Kauf des Gründstücks")
@@ -342,9 +349,12 @@ class AreaOfferAdministration(models.Model):
     adminstrates = models.OneToOneField(AreaOffer)
 
     # if landuse WIND/SOLAR/STORAGE
-    transaction_on_contractsigned_percent = models.DecimalField(decimal_places=2)
-    transaction_on_authorization_percent = models.DecimalField(decimal_places=2)
-    transaction_on_initial_operation_percent = models.DecimalField(decimal_places=2)
+    transaction_on_contractsigned_percent = models.DecimalField(
+        decimal_places=2)
+    transaction_on_authorization_percent = models.DecimalField(
+        decimal_places=2)
+    transaction_on_initial_operation_percent = models.DecimalField(
+        decimal_places=2)
 
     # if landuse ECO
     lease_amount_single_payment = models.DecimalField(
@@ -453,7 +463,8 @@ class ProjectDeveloperSubscription(models.Model):
         to=ProjectDeveloper, on_delete=models.SET_NULL, unique_for_date="valid_from"
     )
 
-    tier = models.ForeignKey(to=PlatformSubscription, on_delete=models.SET_NULL)
+    tier = models.ForeignKey(to=PlatformSubscription,
+                             on_delete=models.SET_NULL)
 
     valid_from = models.DateField()
     valid_to = models.DateField(default="9999-01-01")
@@ -464,7 +475,8 @@ class ProjectDeveloperSubscription(models.Model):
         default=BillingMode.MONTHLY,
     )
 
-    payments = models.ForeignKey("PaymentTransaction", on_delete=models.SET_NULL)
+    payments = models.ForeignKey(
+        "PaymentTransaction", on_delete=models.SET_NULL)
 
 
 class ProjectDeveloperSubscriptionDiscount(models.Model):
@@ -509,7 +521,8 @@ class PromoCode(models.Model):
 class PaymentTransaction(models.Model):
     """Object to store payment transactions"""
 
-    identifier = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    identifier = models.UUIDField(
+        primary_key=True, default=uuid.uuid4, editable=False)
 
     amount = models.DecimalField(decimal_places=2)
 
@@ -573,7 +586,8 @@ class TokenAmount(models.Model):
 class Message(models.Model):
     """Messages are composed in a thread and are displayed in order of creation."""
 
-    identifier = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    identifier = models.UUIDField(
+        primary_key=True, default=uuid.uuid4, editable=False)
 
     sender = models.ForeignKey(User)
     recipient = models.ForeignKey(User)

@@ -17,6 +17,7 @@ from offers.models import AreaOffer, Parcel
 from offers.serializers import AreaOfferSerializer, ParcelSerializer
 
 from .models import Landowner, MarketUser, ProjectDeveloper
+from .models import Landowner, MarketUser, ProjectDeveloper
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -35,9 +36,8 @@ class UserSerializer(serializers.ModelSerializer):
         model = MarketUser
         fields = [
             "id",
-            "username",
-            "first_name",
-            "last_name",
+            "firstname",
+            "lastname",
             "email",
             "phone_number",
             "address",
@@ -45,6 +45,11 @@ class UserSerializer(serializers.ModelSerializer):
             "is_email_confirmed",
             "password",
             "confirm_password",
+            "company_name",
+            "company_website",
+            "city",
+            "zipcode",
+            "profile_picture"
         ]
         read_only_fields = ["id", "is_email_confirmed", "role"]
 
@@ -53,7 +58,8 @@ class UserSerializer(serializers.ModelSerializer):
         Validate that passwords match.
         """
         if attrs.get("password") != attrs.get("confirm_password"):
-            raise serializers.ValidationError({"error": "Passwords must match."})
+            raise serializers.ValidationError(
+                {"error": "Passwords must match."})
         return attrs
 
     def create(self, request, *args, **kwargs):
@@ -92,6 +98,8 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
     class Meta:
         model = MarketUser
         fields = [
+            "firstname",
+            "lastname",
             "email",
             "password",
             "confirm_password",
@@ -104,9 +112,6 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
             "profile_picture",
             "zipcode",
             "city",
-            "street_housenumber",
-            "privacy_accepted",
-            "terms_accepted",
         ]
         extra_kwargs = {
             "email": {"required": True},
@@ -123,17 +128,20 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
 
         mandatory_fields = ["email", "password", "role"]
         if attrs.get("role") == "landowner":
-            mandatory_fields.extend(["phone_number", "address", "zipcode", "city", "street_housenumber"])
+            mandatory_fields.extend(
+                ["phone_number", "address", "zipcode", "city"])
         elif attrs.get("role") == "developer":
             mandatory_fields.extend(["company_name", "company_website"])
 
         for field in mandatory_fields:
             if not attrs.get(field):
-                raise serializers.ValidationError({"error": f"{field} is required."})
+                raise serializers.ValidationError(
+                    {"error": f"{field} is required."})
 
         # Validate password strength
         if len(attrs["password"]) < 6:
-            raise serializers.ValidationError({"error": "Password must be at least 6 characters long."})
+            raise serializers.ValidationError(
+                {"error": "Password must be at least 6 characters long."})
 
         return attrs
 
@@ -142,9 +150,12 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
         Create a new MarketUser during registration.
         """
         validated_data.pop("invite_code", None)
+        validated_data.pop("invite_code", None)
         role = validated_data.pop("role", "landowner")
         user = MarketUser.objects.create_user(
             email=validated_data["email"],
+            firstname=validated_data["firstname"],
+            lastname=validated_data["lastname"],
             password=validated_data["password"],
             role=role,
             phone_number=validated_data.get("phone_number"),
@@ -154,7 +165,6 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
             profile_picture=validated_data.get("profile_picture"),
             zipcode=validated_data.get("zipcode"),
             city=validated_data.get("city"),
-            street_housenumber=validated_data.get("street_housenumber"),
         )
         return user
 
@@ -171,7 +181,7 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
 
         send_mail(
             subject="Confirm Your Email Address",
-            message=f"Hi {user.first_name},\n\nClick the link below to confirm your email:\n{confirmation_link}",
+            message=f"Hi {user.firstname},\n\nClick the link below to confirm your email:\n{confirmation_link}",
             from_email=settings.EMAIL_HOST_USER,
             recipient_list=[user.email],
         )
@@ -197,10 +207,12 @@ class LoginSerializer(serializers.Serializer):
         try:
             user = MarketUser.objects.get(email=email)
         except MarketUser.DoesNotExist as exc:
-            raise serializers.ValidationError({"error": "Invalid email or password."}) from exc
+            raise serializers.ValidationError(
+                {"error": "Invalid email or password."}) from exc
 
         if not user.check_password(password):
-            raise serializers.ValidationError({"error": "Invalid email or password."})
+            raise serializers.ValidationError(
+                {"error": "Invalid email or password."})
 
         if not user.is_email_confirmed:
             raise serializers.ValidationError(
@@ -244,7 +256,7 @@ class LandownerDashboardSerializer(serializers.ModelSerializer):
         """
         offers = AreaOffer.objects.filter(created_by=obj)
         return AreaOfferSerializer(offers, many=True).data
-    
+
 
 class LandownerProfileSerializer(serializers.ModelSerializer):
     """
@@ -254,18 +266,23 @@ class LandownerProfileSerializer(serializers.ModelSerializer):
         model = Landowner
         fields = [
             "id",
-            "profile_picture",
-            "first_name",
-            "last_name",
+            "firstname",
+            "lastname",
             "email",
             "phone_number",
             "address",
-            "zipcode",
-            "city",
-            "position",  # Landowner-specific attribute
+            "role",
             "is_email_confirmed",
+            "password",
+            "company_name",
+            "company_website",
+            "city",
+            "zipcode",
+            "profile_picture",
+            "position"
         ]
         read_only_fields = ["id", "email", "is_email_confirmed"]
+
 
 class DeveloperProfileSerializer(serializers.ModelSerializer):
     """
@@ -276,8 +293,8 @@ class DeveloperProfileSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "profile_picture",
-            "first_name",
-            "last_name",
+            "firstname",
+            "lastname",
             "email",
             "phone_number",
             "address",
@@ -288,6 +305,7 @@ class DeveloperProfileSerializer(serializers.ModelSerializer):
             "is_email_confirmed",
         ]
         read_only_fields = ["id", "email", "is_email_confirmed"]
+
 
 class DeveloperDashboardSerializer(serializers.ModelSerializer):
     """

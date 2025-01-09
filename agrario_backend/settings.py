@@ -12,7 +12,7 @@ from pathlib import Path
 import dj_database_url
 from dotenv import load_dotenv
 from google.oauth2 import service_account
-
+import logging
 
 # Load environment variables
 load_dotenv()
@@ -29,23 +29,41 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = os.getenv('SECRET_KEY')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.getenv('DEBUG', 'False')
+DEBUG = os.getenv("DEBUG", "False").lower() == "true"
+
 FRONTEND_URL = os.getenv('FRONTEND_URL')
 BACKEND_URL = os.getenv('BACKEND_URL')
-
-# Stripe
 STRIPE_SECRET_KEY = os.getenv('STRIPE_SECRET_KEY')
-STRIPE_PUBLISHABLE_KEY = os.getenv('STRIPE_PUBLISHABLE_KEY')
-STRIPE_ENDPOINT_SECRET = os.getenv('STRIPE_ENDPOINT_SECRET')
 
-ALLOWED_HOSTS = ["127.0.0.1",
-                 'agrario-backend-cc0a3b9c6ae6.herokuapp.com', 'localhost']
-
+ALLOWED_HOSTS = ['127.0.0.1',
+                'agrario-backend-cc0a3b9c6ae6.herokuapp.com',
+                'localhost']
 
 
 CSRF_TRUSTED_ORIGINS = [FRONTEND_URL, BACKEND_URL]
 CORS_ALLOWED_ORIGINS = [FRONTEND_URL, BACKEND_URL]
 CORS_ALLOW_CREDENTIALS = True
+
+CORS_ALLOW_HEADERS = [
+    'accept',
+    'accept-encoding',
+    'authorization',
+    'content-type',
+    'dnt',
+    'origin',
+    'user-agent',
+    'x-csrftoken',
+    'x-requested-with',
+]
+
+CORS_ALLOW_METHODS = (
+    "DELETE",
+    "GET",
+    "OPTIONS",
+    "PATCH",
+    "POST",
+    "PUT",
+)
 
 # Swagger settings
 SWAGGER_SETTINGS = {
@@ -77,22 +95,19 @@ INSTALLED_APPS = [
     'corsheaders',
     'rest_framework.authtoken',
     'drf_yasg',
-
-    'phonenumber_field',
-    'phonenumbers',
-
-    'psycopg2',
+    'django_filters',
 
     # custom apps
     'accounts',
     'offers',
-    'messaging',
-    'reports',
     'payments',
-    'invites',
+    'subscriptions',
+    'reports',
+    'messaging',
 ]
 
 MIDDLEWARE = [
+    "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -100,15 +115,13 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
-    "corsheaders.middleware.CorsMiddleware",
 ]
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
-        "accounts.firebase_auth.FirebaseAuthentication"
+        'accounts.firebase_auth.FirebaseAuthentication',
+        'rest_framework.authentication.TokenAuthentication',
     ],
-    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
-    'PAGE_SIZE': 10,
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticated',
     ],
@@ -141,29 +154,23 @@ WSGI_APPLICATION = "agrario_backend.wsgi.application"
 
 
 
-# # Database
-if DEBUG:
-    # Use PostgreSQL for development if environment variables are set
+# Database
+if not DEBUG:
+    # POSTGRESQL
     DATABASES = {
         'default': {
             'ENGINE': 'django.contrib.gis.db.backends.postgis',
-            'NAME': os.getenv("DATABASE_NAME", "agrario"),
-            'USER': os.getenv("DATABASE_USER", "postgres"),
-            'PASSWORD': os.getenv("DATABASE_PASSWORD", "1234"),
-            'HOST': os.getenv("DATABASE_HOST", "localhost"),
-            'PORT': os.getenv("DATABASE_PORT", "5432"),
+            'NAME': os.getenv("DATABASE_NAME"),
+            'USER': os.getenv("DATABASE_USER"),
+            'PASSWORD': os.getenv("DATABASE_PASSWORD"),
+            'HOST': os.getenv("DATABASE_HOST"),
+            'PORT': os.getenv("DATABASE_PORT"),
         }
     }
 else:
-    # Use dj_database_url for production configuration
     DATABASES = {
-        'default': dj_database_url.config(default='postgres://postgres:1234@localhost:5432/agrario')
+        'default': dj_database_url.config(engine='django.contrib.gis.db.backends.postgis')
     }
-
-
-GDAL_LIBRARY_PATH = r"C:\Users\merlin\anaconda3\envs\agrario_env\Library\bin\gdal.dll"
-GEOS_LIBRARY_PATH  = r"C:\Users\merlin\anaconda3\envs\agrario_env\Library\bin\geos_c.dll"
-
 AUTH_USER_MODEL = 'accounts.MarketUser'
 # Load Firebase credentials
 firebase_credentials_path = os.getenv("FIREBASE_CREDENTIALS_JSON_PATH")
@@ -185,12 +192,11 @@ if firebase_config is None:
 # Make firebase_config available to other parts of the app
 FIREBASE_CONFIG = firebase_config
 
+
 # GOOGLE CLOUD
 google_credentials_path = os.getenv("GOOGLE_CREDENTIALS_JSON_PATH")
 google_credentials_base64 = os.getenv("GOOGLE_CREDENTIALS_BASE64")
-GOOGLE_APPLICATION_CREDENTIALS = os.getenv("GOOGLE_CREDENTIALS_JSON_PATH")
-G_CLOUD_BUCKET_NAME_STATIC=os.getenv("G_CLOUD_BUCKET_NAME_STATIC")
-TUTORIAL_LINK_PREFIX = "tutorials/{role}/"
+
 try:
     if google_credentials_path and os.path.exists(google_credentials_path):
         # Use the credentials file if it exists
@@ -231,6 +237,9 @@ STORAGES = {
     },
 }
 
+# GDAL_LIBRARY_PATH = r"C:\Users\gacic\anaconda3\envs\agrario_env\Library\bin\gdal.dll"
+# GEOS_LIBRARY_PATH  = r"C:\Users\gacic\anaconda3\envs\agrario_env\Library\bin\geos_c.dll"
+
 # Static files configuration
 STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
@@ -263,15 +272,13 @@ USE_TZ = True
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 
-EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-EMAIL_HOST = os.getenv('EMAIL_HOST', 'smtp.gmail.com')
-EMAIL_PORT = os.getenv('EMAIL_PORT', 587)
-EMAIL_USE_TLS = os.getenv('EMAIL_USE_TLS', 'True') == 'True'
-EMAIL_USE_SSL = os.getenv('EMAIL_USE_SSL', 'False') == 'True'  # For servers requiring SSL
-EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER')  # Your SMTP username
-EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD')  # Your SMTP password
-DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'noreply@yourdomain.com')
-SERVER_EMAIL = os.getenv('SERVER_EMAIL', 'errors@yourdomain.com')  # Error reporting email
+STATIC_URL = '/static/'
+STATIC_ROOT = BASE_DIR / 'staticfiles'
 
-# Optional settings to ensure email subject prefixes
-EMAIL_SUBJECT_PREFIX = '[Agrario]'
+
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = 'smtp.gmail.com'
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER')
+EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD')

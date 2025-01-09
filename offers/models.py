@@ -10,7 +10,8 @@ from django.contrib.gis.db import models as gis_models
 import uuid
 from django.db import models
 from django.utils.translation import gettext_lazy as _
-from accounts.models import Landowner, MarketUser  # Replace with the actual user model
+# Replace with the actual user model
+from accounts.models import Landowner, MarketUser
 import random
 
 
@@ -63,8 +64,10 @@ class Parcel(models.Model):
     plot_number_secondary = models.CharField(max_length=8)
     land_use = models.CharField(max_length=255)
     area_square_meters = models.DecimalField(max_digits=12, decimal_places=2)
-    polygon = gis_models.PolygonField(null=True, blank=True)  # GeoDjango field for polygons
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="available")
+    polygon = gis_models.PolygonField(
+        null=True, blank=True)  # GeoDjango field for polygons
+    status = models.CharField(
+        max_length=20, choices=STATUS_CHOICES, default="available")
 
     appear_in_offer = models.ForeignKey(
         "AreaOffer", related_name="parcels", on_delete=models.SET_NULL, null=True
@@ -83,11 +86,14 @@ class AreaOffer(models.Model):
     Represents an offer containing multiple parcels and criteria set by the landowner.
     """
 
-    identifier = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    offer_number = models.PositiveIntegerField(auto_created=True, unique=True, editable=False)
+    identifier = models.UUIDField(
+        primary_key=True, default=uuid.uuid4, editable=False)
+    offer_number = models.PositiveIntegerField(
+        auto_created=True, unique=True, editable=False)
     title = models.CharField(max_length=255)
     description = models.TextField()
-    criteria = models.JSONField(default=dict, blank=True)  # Dynamic key-value pairs
+    # Dynamic key-value pairs
+    criteria = models.JSONField(default=dict, blank=True)
 
     class OfferStatus(models.TextChoices):
         IN_PREPARATION = "V", _("In Preparation")
@@ -131,6 +137,7 @@ class AreaOffer(models.Model):
     def __str__(self):
         return f"{self.title} (#{self.offer_number})"
 
+
 class AreaOfferDocuments(models.Model):
     """
     Model representing documents associated with an area offer.
@@ -161,7 +168,10 @@ class AreaOfferConfirmation(models.Model):
     offer = models.OneToOneField(
         AreaOffer, on_delete=models.CASCADE, related_name="confirmation"
     )
-    confirmed_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    confirmed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    confirmed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     confirmed_at = models.DateTimeField(auto_now_add=True)
 
 
