@@ -10,13 +10,14 @@ from django.contrib.auth.models import AbstractUser
 from phonenumber_field.modelfields import PhoneNumberField
 from django.db import models
 # from django.contrib.gis.db import models as models2
-from firebase_admin import auth
 from django.contrib.auth.models import BaseUserManager
+
 
 class MarketUserManager(BaseUserManager):
     """
     Custom manager for MarketUser without a username field.
     """
+
     def create_user(self, email, password=None, **extra_fields):
         if not email:
             raise ValueError("The Email field must be set")
@@ -35,22 +36,8 @@ class MarketUserManager(BaseUserManager):
         if extra_fields.get('is_superuser') is not True:
             raise ValueError("Superuser must have is_superuser=True.")
 
-        # Validate password length
-        if not password or len(password) < 6:
-            raise ValueError("Password must be at least 6 characters long.")
+        return self.create_user(email, password, **extra_fields)
 
-
-        # Create Django user
-        user = self.create_user(email, password, **extra_fields)
-
-        # Create Firebase user
-        firebase_user = auth.create_user(email=email, password=password)
-        user.firebase_uid = firebase_user.uid
-        user.is_active = True  # Superusers are active by default
-        user.is_email_confirmed = True  # Skip email confirmation for superusers
-        user.save()
-
-        return user
 
 class MarketUser(AbstractUser):
     """
@@ -78,14 +65,16 @@ class MarketUser(AbstractUser):
         editable=False
     )
     email = models.EmailField(unique=True)
+    firstname = models.CharField(max_length=255)
+    lastname = models.CharField(max_length=255)
     phone_number = PhoneNumberField(
         region="DE", max_length=20, blank=True, null=True)
     address = models.CharField(max_length=255, null=True, blank=True)
     company_name = models.CharField(max_length=255, null=True, blank=True)
     company_website = models.URLField(null=True, blank=True)
-    profile_picture = models.FileField(upload_to="profile_pictures/", blank=True)
+    profile_picture = models.FileField(
+        upload_to="profile_pictures/", blank=True)
     city = models.CharField(max_length=50, null=True)
-    street_housenumber = models.CharField(max_length=50, null=True)
     zipcode = models.CharField(max_length=5)
     is_email_confirmed = models.BooleanField(default=False)
     role = models.CharField(
@@ -96,12 +85,13 @@ class MarketUser(AbstractUser):
     terms_accepted = models.BooleanField(default=False)
 
     USERNAME_FIELD = "email"
-    REQUIRED_FIELDS = ['first_name', 'last_name', 'company_name', 'address', 'zipcode', 'city', 'phone_number']
-    
+    REQUIRED_FIELDS = ['firstname', 'lastname', 'company_name',
+                       'address', 'zipcode', 'city', 'phone_number']
+
     objects = MarketUserManager()
 
     def __str__(self):
-        return f"{self.first_name} {self.last_name} ({self.get_role_display()})"
+        return f"{self.firstname} {self.lastname} ({self.get_role_display()})"
 
     @property
     def id(self):
@@ -117,6 +107,7 @@ class MarketUser(AbstractUser):
         if self.file:
             self.file.delete()
         super().delete(*args, **kwargs)
+
 
 class Landowner(MarketUser):
     """
@@ -151,7 +142,8 @@ class ProjectDeveloper(MarketUser):
     class Meta:
         verbose_name = "Project Developer"
         verbose_name_plural = "Project Developers"
-        
+
+
 class Region(models.Model):
 
     name = models.CharField(max_length=64)
@@ -162,6 +154,7 @@ class Region(models.Model):
     )
 
     # geom = models2.MultiPolygonField()
+
 
 class ProjectDeveloperInterest(models.Model):
     """Interest of the project developer"""
