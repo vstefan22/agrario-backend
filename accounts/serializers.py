@@ -3,6 +3,7 @@
 Defines serializers for users, landowners, project developers, and dashboards.
 """
 
+import logging
 from django.contrib.auth.password_validation import validate_password
 from django.contrib.auth.tokens import default_token_generator
 from django.core.mail import send_mail
@@ -13,11 +14,12 @@ from django.utils.translation import gettext_lazy as _
 from rest_framework import serializers
 from rest_framework.response import Response
 from rest_framework import status
-from offers.models import AreaOffer, Parcel
 from offers.serializers import AreaOfferSerializer, ParcelSerializer
-
+from django.conf import settings
+from django.urls import reverse
+logger = logging.getLogger(__name__)
 from .models import Landowner, MarketUser, ProjectDeveloper, ProjectDeveloperInterest
-from .models import Landowner, MarketUser, ProjectDeveloper
+from offers.models import AreaOffer
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -174,8 +176,6 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
         """
         Generate and send an email confirmation link to the user.
         """
-        from django.conf import settings
-        from django.urls import reverse
 
         token = default_token_generator.make_token(user)
         uid = urlsafe_base64_encode(force_bytes(user.pk))
@@ -233,31 +233,86 @@ class LoginSerializer(serializers.Serializer):
 
 class LandownerDashboardSerializer(serializers.ModelSerializer):
     """
-    Serializer for Landowner dashboard data.
-
-    Provides details about parcels and offers related to the landowner.
+    Serializer for Landowner Dashboard data.
+    Provides greeting, quick action links, notifications, and statistics.
     """
 
-    parcels = serializers.SerializerMethodField()
-    offers = serializers.SerializerMethodField()
+    # Tutorials
+    tutorial_links = serializers.SerializerMethodField()
+
+    # Notifications
+    notifications = serializers.SerializerMethodField()
+
+    # Parcels Overview
+    statistics = serializers.SerializerMethodField()
 
     class Meta:
         model = Landowner
-        fields = ["id", "username", "email", "parcels", "offers"]
+        fields = [
+            "firstname",        # For personalized greeting
+            "tutorial_links",   # List of tutorial video URLs
+            "notifications",    # Notifications and unread message counts
+            "statistics",       # Parcel statistics
+        ]
 
-    def get_parcels(self, obj):
+    def get_tutorial_links(self, role):
         """
-        Retrieve parcels created by the landowner.
+        Retrieves public links to tutorial videos based on the normalized role.
         """
-        parcels = Parcel.objects.filter(created_by=obj)
-        return ParcelSerializer(parcels, many=True).data
+        try:
+            from google.cloud import storage
+            from django.conf import settings
 
-    def get_offers(self, obj):
+            # Ensure the role is normalized to a string
+            if not isinstance(role, str):
+                raise ValueError(f"Expected a string for role, got {type(role).__name__}")
+
+            normalized_role = role.lower().strip()  # Normalize role to match bucket structure
+
+            # Initialize Google Cloud Storage client using credentials
+            storage_client = storage.Client(
+                credentials=settings.GS_CREDENTIALS, project=settings.G_CLOUD_PROJECT_ID
+            )
+            bucket = storage_client.bucket(settings.G_CLOUD_BUCKET_NAME_STATIC)
+
+            # Construct the prefix
+            prefix = f"tutorials/{normalized_role}/"
+            blobs = bucket.list_blobs(prefix=prefix)
+
+            # Collect public URLs
+            tutorial_links = [blob.public_url for blob in blobs if not blob.name.endswith("/")]
+
+            # Log if no files are found
+            if not tutorial_links:
+                logger.warning(
+                    f"No tutorial videos found for role: {normalized_role} in bucket with prefix: {prefix}"
+                )
+
+            return tutorial_links
+        except Exception as e:
+            logger.error(f"Error retrieving tutorial links for role '{role}': {e}")
+            return []
+        
+    def get_notifications(self, obj):
         """
-        Retrieve area offers created by the landowner.
+        Retrieve notifications (unread messages).
         """
-        offers = AreaOffer.objects.filter(created_by=obj)
-        return AreaOfferSerializer(offers, many=True).data
+        from messaging.models import Message  # Replace with actual model path
+
+        unread_messages = Message.objects.filter(sender=obj, is_read=False).count()
+        return {
+            "unread_messages": unread_messages
+        }
+
+    def get_statistics(self, obj):
+        """
+        Return parcel statistics (owned and pending analysis).
+        """
+        return {
+            "parcels_owned": obj.created_parcels.count(),
+            "parcels_pending_analysis": obj.created_parcels.filter(status="pending_analysis").count(),
+        }
+
 
 
 class LandownerSerializer(serializers.ModelSerializer):
