@@ -9,6 +9,8 @@ from django.core.validators import MinLengthValidator
 from django.contrib.auth.models import AbstractUser
 from phonenumber_field.modelfields import PhoneNumberField
 from django.db import models
+from django.core.validators import MinValueValidator, MaxValueValidator
+import datetime
 # from django.contrib.gis.db import models as models2
 from django.contrib.auth.models import BaseUserManager
 
@@ -72,6 +74,7 @@ class MarketUser(AbstractUser):
     address = models.CharField(max_length=255, null=True, blank=True)
     company_name = models.CharField(max_length=255, null=True, blank=True)
     company_website = models.URLField(null=True, blank=True)
+    position = models.CharField(max_length=100, null=True, blank=True)
     profile_picture = models.FileField(
         upload_to="profile_pictures/", blank=True)
     city = models.CharField(max_length=50, null=True)
@@ -116,14 +119,11 @@ class Landowner(MarketUser):
     Attributes:
         position: Optional position or title of the landowner.
     """
-
-    position = models.CharField(max_length=100, null=True, blank=True)
-
     class Meta:
         verbose_name = "Landowner"
         verbose_name_plural = "Landowners"
 
-
+current_year = datetime.datetime.now().year
 class ProjectDeveloper(MarketUser):
     """
     Model for Project Developers, inheriting from MarketUser.
@@ -132,11 +132,29 @@ class ProjectDeveloper(MarketUser):
         company_name: Optional name of the developer's company.
         company_website: Optional website URL of the company.
     """
-
-    company_logo = models.FileField(
-        upload_to="company_logos/", null=True, blank=True)
+    
     interest = models.ForeignKey(
         to="ProjectDeveloperInterest", on_delete=models.CASCADE
+    )
+    company_logo = models.FileField(
+        upload_to="company_logos/", null=True, blank=True)
+    founding_year = models.PositiveIntegerField(
+        validators=[
+            MinValueValidator(1500),
+            MaxValueValidator(current_year)
+        ],
+        blank=True,
+        null=True
+    )
+    mw_capacity = models.PositiveIntegerField(
+        validators=[MinValueValidator(0)],
+        blank=True,
+        null=True,
+    )
+    employees = models.PositiveIntegerField(
+        validators=[MinValueValidator(1)],
+        blank=True,
+        null=True,
     )
     states_active = models.ManyToManyField(to="Region")
 
