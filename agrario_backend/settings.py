@@ -169,10 +169,24 @@ if DEBUG:
             'PORT': os.getenv("DATABASE_PORT"),
         }
     }
-else:
-    DATABASES = {
-        'default': dj_database_url.config(engine='django.contrib.gis.db.backends.postgis')
-    }
+
+# Database
+# if not DEBUG:
+#     # POSTGRESQL
+#     DATABASES = {
+#         'default': {
+#             'ENGINE': 'django.contrib.gis.db.backends.postgis',
+#             'NAME': os.getenv("DATABASE_NAME"),
+#             'USER': os.getenv("DATABASE_USER"),
+#             'PASSWORD': os.getenv("DATABASE_PASSWORD"),
+#             'HOST': os.getenv("DATABASE_HOST"),
+#             'PORT': os.getenv("DATABASE_PORT"),
+#         }
+#     }
+# else:
+#     DATABASES = {
+#         'default': dj_database_url.config(engine='django.contrib.gis.db.backends.postgis')
+#     }
 AUTH_USER_MODEL = 'accounts.MarketUser'
 # Load Firebase credentials
 firebase_credentials_path = os.getenv("FIREBASE_CREDENTIALS_JSON_PATH")
@@ -220,6 +234,9 @@ except Exception as e:
     logging.error(f"Error loading Google Cloud credentials: {e}")
     raise
 
+G_CLOUD_PROJECT_ID = os.getenv("G_CLOUD_PROJECT_ID")
+G_CLOUD_BUCKET_NAME_MEDIA = os.getenv("G_CLOUD_BUCKET_NAME_MEDIA")
+G_CLOUD_BUCKET_NAME_STATIC = os.getenv("G_CLOUD_BUCKET_NAME_STATIC")
 STORAGES = {
     "default": {
         "BACKEND": "storages.backends.gcloud.GoogleCloudStorage",
