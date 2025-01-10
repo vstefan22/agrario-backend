@@ -23,9 +23,9 @@ from rest_framework.exceptions import AuthenticationFailed
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from offers.models import AreaOffer, Parcel
-from .models import MarketUser
+from .models import MarketUser, Landowner, ProjectDeveloper
 from .firebase_auth import FirebaseAuthentication, verify_firebase_token, create_firebase_user
-from .serializers import UserRegistrationSerializer, UserSerializer, LandownerProfileSerializer, DeveloperProfileSerializer
+from .serializers import UserSerializer, LandownerSerializer, ProjectDeveloperSerializer
 from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_encode
 from firebase_admin import auth as firebase_auth
@@ -39,7 +39,6 @@ class MarketUserViewSet(viewsets.ModelViewSet):
     ViewSet for managing MarketUser instances.
     """
     queryset = MarketUser.objects.all()
-    serializer_class = UserRegistrationSerializer
 
     def get_permissions(self):
         """
@@ -48,27 +47,26 @@ class MarketUserViewSet(viewsets.ModelViewSet):
         if self.action in ["create", "confirm_email"]:
             return [AllowAny()]
         return [IsAuthenticated()]
-
-    @swagger_auto_schema(
-        operation_summary="Create a new user",
-        operation_description="Handles user registration, Firebase user creation, and email confirmation.",
-        request_body=UserRegistrationSerializer,
-        responses={
-            201: openapi.Response("User registered successfully. Please confirm your email."),
-            400: "Bad Request - Validation Error",
-        },
-    )
+    
     def create(self, request, *args, **kwargs):
         """
         Handles user registration, Firebase user creation, and email confirmation.
         """
-        serializer = self.get_serializer(data=request.data)
+        role = request.data.get("role")
+        
+        if role == "landowner":
+            serializer_class = LandownerSerializer
+        elif role == "developer":
+            serializer_class = ProjectDeveloperSerializer
+        else:
+            return Response({"error": "Invalid role."}, status=status.HTTP_400_BAD_REQUEST)
+
+        serializer = serializer_class(data=request.data)
         serializer.is_valid(raise_exception=True)
 
         # Extract validated data
         email = serializer.validated_data["email"]
         password = serializer.validated_data["password"]
-        role = serializer.validated_data["role"]
 
         # Create Firebase user
         firebase_user = create_firebase_user(email=email, password=password)
@@ -79,7 +77,7 @@ class MarketUserViewSet(viewsets.ModelViewSet):
         user.is_active = False  # Inactive until email is confirmed
         user.save()
 
-        # Send confirmation email
+        # Send confirmation email (implement your own logic here)
         self.send_confirmation_email(user)
 
         return Response(
@@ -471,7 +469,9 @@ class RoleDashboardView(APIView):
 
         # Fetch user role and tutorial links
         role = get_user_role(decoded_token, email)
-        username = user.first_name or email.split("@")[0]
+
+        # Use the first part of the email as a placeholder for the username if it's None
+        username = user.firstname or email.split("@")[0]
         tutorial_links = self.get_tutorial_links(role)
 
         # Fetch role-specific data
@@ -511,9 +511,9 @@ class MarketUserProfileView(viewsets.ViewSet):
             Serializer class based on the user's role or None if unsupported.
         """
         if user.role == "landowner":
-            return LandownerProfileSerializer
+            return LandownerSerializer
         if user.role == "developer":
-            return DeveloperProfileSerializer
+            return ProjectDeveloperSerializer
         return None
 
     @staticmethod
@@ -558,22 +558,29 @@ class MarketUserProfileView(viewsets.ViewSet):
     def retrieve(self, request, *args, **kwargs):
         """
         Retrieve the profile details of the authenticated user.
-
-        Args:
-            request: The HTTP request object.
-
-        Returns:
-            Response containing the user's profile data or an error message.
         """
         user = self.get_authenticated_user(request)
         if isinstance(user, Response):
             return user
 
-        serializer_class = self.get_serializer_class(user)
+        if user.role == "landowner":
+            try:
+                user_instance = Landowner.objects.get(identifier=user.identifier)
+            except Landowner.DoesNotExist:
+                return Response({"error": "Landowner instance not found."}, status=status.HTTP_404_NOT_FOUND)
+        elif user.role == "developer":
+            try:
+                user_instance = ProjectDeveloper.objects.filter(identifier=user.identifier).select_related("interest").first()
+            except ProjectDeveloper.DoesNotExist:
+                return Response({"error": "Developer instance not found."}, status=status.HTTP_404_NOT_FOUND)
+        else:
+            return Response({"error": "Unsupported role."}, status=status.HTTP_400_BAD_REQUEST)
+
+        serializer_class = self.get_serializer_class(user_instance)
         if not serializer_class:
             return Response({"error": "Unsupported role."}, status=status.HTTP_400_BAD_REQUEST)
 
-        serializer = serializer_class(user)
+        serializer = serializer_class(user_instance)
         return Response(serializer.data, status=status.HTTP_200_OK)
     
     @swagger_auto_schema(
@@ -609,13 +616,30 @@ class MarketUserProfileView(viewsets.ViewSet):
         if isinstance(user, Response):
             return user
 
-        serializer_class = self.get_serializer_class(user)
+        # Fetch the correct subclass instance (Landowner or Developer)
+        if user.role == "landowner":
+            try:
+                user_instance = Landowner.objects.get(identifier=user.identifier)
+            except Landowner.DoesNotExist:
+                return Response({"error": "Landowner instance not found."}, status=status.HTTP_404_NOT_FOUND)
+        elif user.role == "developer":
+            try:
+                user_instance = ProjectDeveloper.objects.filter(identifier=user.identifier).select_related("interest").first()
+            except ProjectDeveloper.DoesNotExist:
+                return Response({"error": "Developer instance not found."}, status=status.HTTP_404_NOT_FOUND)
+        else:
+            return Response({"error": "Unsupported role."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Get the serializer class for the specific user role
+        serializer_class = self.get_serializer_class(user_instance)
         if not serializer_class:
             return Response({"error": "Unsupported role."}, status=status.HTTP_400_BAD_REQUEST)
 
-        serializer = serializer_class(user, data=request.data, partial=True)
+        # Pass the specific subclass instance to the serializer
+        serializer = serializer_class(user_instance, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         serializer.save()
+
         return Response(serializer.data, status=status.HTTP_200_OK)
 
 

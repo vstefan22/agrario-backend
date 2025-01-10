@@ -78,7 +78,7 @@ class MarketUser(AbstractUser):
     zipcode = models.CharField(max_length=5)
     is_email_confirmed = models.BooleanField(default=False)
     role = models.CharField(
-        max_length=20, choices=ROLE_CHOICES, default="landowner")
+        max_length=20, choices=ROLE_CHOICES)
     reset_code = models.CharField(max_length=6, null=True, blank=True)
     reset_code_created_at = models.DateTimeField(null=True, blank=True)
     privacy_accepted = models.BooleanField(default=False)

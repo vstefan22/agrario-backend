@@ -16,7 +16,7 @@ from rest_framework import status
 from offers.models import AreaOffer, Parcel
 from offers.serializers import AreaOfferSerializer, ParcelSerializer
 
-from .models import Landowner, MarketUser, ProjectDeveloper
+from .models import Landowner, MarketUser, ProjectDeveloper, ProjectDeveloperInterest
 from .models import Landowner, MarketUser, ProjectDeveloper
 
 
@@ -260,10 +260,16 @@ class LandownerDashboardSerializer(serializers.ModelSerializer):
         return AreaOfferSerializer(offers, many=True).data
 
 
-class LandownerProfileSerializer(serializers.ModelSerializer):
+class LandownerSerializer(serializers.ModelSerializer):
     """
     Serializer for Landowner-specific profile details.
     """
+
+    password = serializers.CharField(
+        write_only=True, required=True, validators=[validate_password]
+    )
+    confirm_password = serializers.CharField(write_only=True, required=True)
+
     class Meta:
         model = Landowner
         fields = [
@@ -273,23 +279,61 @@ class LandownerProfileSerializer(serializers.ModelSerializer):
             "email",
             "phone_number",
             "address",
-            "role",
-            "is_email_confirmed",
-            "password",
+            "zipcode",
+            "city",
             "company_name",
             "company_website",
-            "city",
-            "zipcode",
             "profile_picture",
-            "position"
+            "position",
+            "password",
+            "confirm_password",
+            "role",
         ]
-        read_only_fields = ["id", "email", "is_email_confirmed"]
+        read_only_fields = ["id"]
+
+    def validate(self, attrs):
+        """
+        Validate that passwords match and required fields are present for create.
+        """
+        if self.instance:  # During update, skip mandatory field checks
+            return attrs
+
+        # Validate passwords during creation
+        if attrs.get("password") != attrs.get("confirm_password"):
+            raise serializers.ValidationError({"password": "Passwords do not match."})
+
+        # Check for mandatory fields during creation
+        mandatory_fields = ["email", "phone_number", "address", "zipcode", "city"]
+        for field in mandatory_fields:
+            if not attrs.get(field):
+                raise serializers.ValidationError({field: f"{field} is required."})
+
+        return attrs
+
+    def create(self, validated_data):
+        """
+        Create a new Landowner.
+        """
+        validated_data.pop("confirm_password")
+        return Landowner.objects.create_user(**validated_data)
 
 
-class DeveloperProfileSerializer(serializers.ModelSerializer):
+class ProjectDeveloperSerializer(serializers.ModelSerializer):
     """
-    Serializer for ProjectDeveloper-specific profile details.
+    Serializer for ProjectDeveloper-specific profile details with embedded interest fields.
     """
+    email = serializers.EmailField(required=True)
+    password = serializers.CharField(write_only=True, required=True)
+    confirm_password = serializers.CharField(write_only=True, required=True)
+    wind = serializers.BooleanField(source="interest.wind", required=False)
+    ground_mounted_solar = serializers.BooleanField(source="interest.ground_mounted_solar", required=False)
+    battery = serializers.BooleanField(source="interest.battery", required=False)
+    heat = serializers.BooleanField(source="interest.heat", required=False)
+    hydrogen = serializers.BooleanField(source="interest.hydrogen", required=False)
+    electromobility = serializers.BooleanField(source="interest.electromobility", required=False)
+    ecological_upgrading = serializers.BooleanField(source="interest.ecological_upgrading", required=False)
+    other = serializers.CharField(source="interest.other", required=False)
+
     class Meta:
         model = ProjectDeveloper
         fields = [
@@ -302,12 +346,66 @@ class DeveloperProfileSerializer(serializers.ModelSerializer):
             "address",
             "zipcode",
             "city",
-            "company_name",  # Developer-specific attribute
-            "company_website",  # Developer-specific attribute
-            "is_email_confirmed",
+            "company_name",
+            "company_website",
+            "profile_picture",
+            "password",
+            "confirm_password",
+            "wind",
+            "ground_mounted_solar",
+            "battery",
+            "heat",
+            "hydrogen",
+            "electromobility",
+            "ecological_upgrading",
+            "other",
+            "role",
         ]
-        read_only_fields = ["id", "email", "is_email_confirmed"]
+        read_only_fields = ["id", "email"]
 
+    def validate(self, attrs):
+        """
+        Validate that passwords match and required fields are present.
+        """
+        if attrs.get("password") != attrs.get("confirm_password"):
+            raise serializers.ValidationError({"password": "Passwords do not match."})
+
+        return attrs
+
+    def create(self, validated_data):
+        """
+        Create a new ProjectDeveloper instance and associated ProjectDeveloperInterest.
+        """
+        # Extract interest-related fields
+        interest_data = validated_data.pop("interest", {})
+
+        # Create ProjectDeveloperInterest instance
+        interest = ProjectDeveloperInterest.objects.create(**interest_data)
+
+        # Remove confirm_password
+        validated_data.pop("confirm_password")
+
+        # Create ProjectDeveloper instance
+        developer = ProjectDeveloper.objects.create_user(interest=interest, **validated_data)
+
+        return developer
+
+    def update(self, instance, validated_data):
+        """
+        Update the ProjectDeveloper instance and its associated interest fields.
+        """
+        # Extract and update interest fields if present
+        interest_data = validated_data.pop("interest", {})
+        for attr, value in interest_data.items():
+            setattr(instance.interest, attr, value)
+        instance.interest.save()
+
+        # Update other fields on the ProjectDeveloper instance
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+
+        return instance
 
 class DeveloperDashboardSerializer(serializers.ModelSerializer):
     """

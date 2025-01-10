@@ -10,6 +10,15 @@ class Report(models.Model):
     """
     Report model linked to one or more parcels.
     """
+
+    class PurchaseType(models.TextChoices):
+        ANALYSE = "analyse", "Analyse"
+        ANALYSE_PLUS = "analyse_plus", "Analyse Plus"
+
+    purchase_type = models.CharField(
+        max_length=20, choices=PurchaseType.choices, default=PurchaseType.ANALYSE
+    )
+    
     identifier = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     created = models.DateTimeField(auto_now=True)
     parcels = models.ManyToManyField(Parcel, related_name="reports")  # New field
