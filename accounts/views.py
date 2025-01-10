@@ -4,10 +4,8 @@ Includes views for user registration, login, email confirmation, and role-based 
 """
 
 import logging, requests
-import stripe
 from django.conf import settings
 from django.contrib.auth.tokens import default_token_generator
-from django.contrib.auth import authenticate
 from django.core.mail import send_mail
 from django.http import HttpResponse, JsonResponse
 from django.utils.crypto import get_random_string
@@ -25,7 +23,7 @@ from rest_framework.views import APIView
 from offers.models import AreaOffer, Parcel
 from .models import MarketUser
 from .firebase_auth import FirebaseAuthentication, verify_firebase_token, create_firebase_user
-from .serializers import UserRegistrationSerializer, UserSerializer, LandownerProfileSerializer, DeveloperProfileSerializer
+from .serializers import UserRegistrationSerializer, UserSerializer, LandownerProfileSerializer, DeveloperProfileSerializer, LandownerDashboardSerializer
 from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_encode
 from firebase_admin import auth as firebase_auth
@@ -345,91 +343,51 @@ class RoleDashboardView(APIView):
 
     def get_tutorial_links(self, role):
         """
-        Retrieves public links to tutorial videos based on the user's role.
+        Retrieves public links to tutorial videos based on the user's role using dynamic credentials.
         """
         try:
-            storage_client = storage.Client.from_service_account_json(settings.GOOGLE_APPLICATION_CREDENTIALS)
+            from google.cloud import storage
+            from django.conf import settings
+
+            # Initialize Google Cloud Storage client using GS_CREDENTIALS
+            storage_client = storage.Client(credentials=settings.GS_CREDENTIALS, project=settings.G_CLOUD_PROJECT_ID)
             bucket = storage_client.bucket(settings.G_CLOUD_BUCKET_NAME_STATIC)
 
-            # Use the configurable prefix
-            prefix = settings.TUTORIAL_LINK_PREFIX.format(role=role)
-            logger.info(f"Fetching files from bucket with prefix: {prefix}")
-
+            # Correct prefix based on folder structure
+            prefix = f"tutorials/{role}/"
             blobs = bucket.list_blobs(prefix=prefix)
-            tutorial_links = []
 
-            for blob in blobs:
-                logger.info(f"Found blob: {blob.name}")
-                if not blob.name.endswith("/"):  # Ignore directories
-                    tutorial_links.append(blob.public_url)
+            # Collect public URLs for the files
+            tutorial_links = [blob.public_url for blob in blobs if not blob.name.endswith("/")]
 
+            # Log if no files were found
             if not tutorial_links:
-                logger.warning(f"No tutorials found for role: {role}")
+                logger.warning(f"No tutorial videos found for role: {role} in bucket with prefix: {prefix}")
+
             return tutorial_links
         except Exception as e:
             logger.error(f"Error retrieving tutorial links for role '{role}': {e}")
             return []
 
-    @swagger_auto_schema(
-        tags=["Dashboard"],
-        operation_summary="Get Dashboard",
-        operation_description=(
-            "Retrieve role-specific dashboard data along with tutorial links. "
-            "The user's role determines the content of the dashboard. "
-            "Includes a list of tutorial videos hosted on Google Cloud Storage."
-        ),
-        responses={
-            200: openapi.Response(
-                description="Role-specific dashboard data.",
-                examples={
-                    "application/json": {
-                        "dashboard_greeting": "Welcome Landowner JohnDoe!",
-                        "tutorial_links": [
-                            "https://storage.googleapis.com/agrario-static/tutorials/tutorial1.mp4",
-                            "https://storage.googleapis.com/agrario-static/tutorials/tutorial2.mp4",
-                        ],
-                    }
-                },
-            ),
-            401: openapi.Response(
-                description="Unauthorized - Invalid or missing authentication token.",
-                examples={
-                    "application/json": {
-                        "error": "Authentication token not provided."
-                    }
-                },
-            ),
-            403: openapi.Response(
-                description="Forbidden - User account inactive.",
-                examples={
-                    "application/json": {
-                        "error": "User account is inactive."
-                    }
-                },
-            ),
-            404: openapi.Response(
-                description="Not Found - User does not exist.",
-                examples={
-                    "application/json": {
-                        "error": "User does not exist."
-                    }
-                },
-            ),
-        },
-    )
+   
     
     def get_landowner_data(self, user):
         """
         Fetch additional dashboard data for landowners.
         """
-        parcels_owned = user.created_parcels.count()  # Use the correct related_name
+        parcels_owned = user.created_parcels.count()
         parcels_pending_analysis = user.created_parcels.filter(status="pending_analysis").count()
-        notifications = []  # Add logic for notifications if required
+
+        # Fetch unread messages count
+        from messaging.models import Message  # Replace with the correct model path
+        unread_messages = Message.objects.filter(sender=user, is_read=False).count()
 
         return {
             "parcels_owned": parcels_owned,
             "parcels_pending_analysis": parcels_pending_analysis,
-            "notifications": notifications,
+            "notifications": {
+                "unread_messages": unread_messages,
+            },
         }
     
     def get_developer_data(self, user):
@@ -445,9 +403,58 @@ class RoleDashboardView(APIView):
             "projects_pending_approval": projects_pending_approval,
             "notifications": notifications,
         }
+    # def get(self, request):
+    #     """
+    #     Retrieve dashboard data based on the user's role and include tutorial links.
+    #     """
+    #     auth_header = request.headers.get("Authorization")
+    #     if not auth_header or not auth_header.startswith("Bearer "):
+    #         return Response({"error": "Authentication token not provided."}, status=status.HTTP_401_UNAUTHORIZED)
+
+    #     token = auth_header.split("Bearer ")[1]
+    #     decoded_token = verify_firebase_token(token)
+
+    #     if not decoded_token:
+    #         logger.warning("Failed to decode token or token expired.")
+    #         return Response({"error": "Invalid or expired Firebase token."}, status=status.HTTP_401_UNAUTHORIZED)
+
+    #     email = decoded_token.get("email")
+    #     try:
+    #         user = MarketUser.objects.get(email=email)
+    #     except MarketUser.DoesNotExist:
+    #         return Response({"error": "User does not exist."}, status=status.HTTP_404_NOT_FOUND)
+
+    #     if not user.is_active:
+    #         return Response({"error": "User account is inactive."}, status=status.HTTP_403_FORBIDDEN)
+
+    #     # Fetch user role and tutorial links
+    #     role = get_user_role(decoded_token, email)
+
+    #     # Use the first part of the email as a placeholder for the username if it's None
+    #     username = user.firstname or email.split("@")[0]
+    #     tutorial_links = self.get_tutorial_links(role)
+
+    #     # Fetch role-specific data
+    #     if role == "landowner":
+    #         role_data = self.get_landowner_data(user)
+    #     elif role == "developer":
+    #         role_data = self.get_developer_data(user)
+    #     else:
+    #         role_data = {}
+
+    #     dashboard_greeting = f"Welcome {role.capitalize()} {username}!"
+    #     dashboard_data = {
+    #         "dashboard_greeting": dashboard_greeting,
+    #         "tutorial_links": tutorial_links,
+    #         "role": role,
+    #         **role_data,
+    #     }
+
+    #     return Response(dashboard_data, status=status.HTTP_200_OK)
+
     def get(self, request):
         """
-        Retrieve dashboard data based on the user's role and include tutorial links.
+        Retrieve dashboard data based on the user's role.
         """
         auth_header = request.headers.get("Authorization")
         if not auth_header or not auth_header.startswith("Bearer "):
@@ -457,7 +464,6 @@ class RoleDashboardView(APIView):
         decoded_token = verify_firebase_token(token)
 
         if not decoded_token:
-            logger.warning("Failed to decode token or token expired.")
             return Response({"error": "Invalid or expired Firebase token."}, status=status.HTTP_401_UNAUTHORIZED)
 
         email = decoded_token.get("email")
@@ -469,11 +475,10 @@ class RoleDashboardView(APIView):
         if not user.is_active:
             return Response({"error": "User account is inactive."}, status=status.HTTP_403_FORBIDDEN)
 
-        # Fetch user role and tutorial links
-        role = get_user_role(decoded_token, email)
+        # Correctly derive the role as a string
+        role = user.role.lower()  # Ensure the role is in lowercase
 
-        # Use the first part of the email as a placeholder for the username if it's None
-        username = user.firstname or email.split("@")[0]
+        # Fetch tutorial links for the normalized role
         tutorial_links = self.get_tutorial_links(role)
 
         # Fetch role-specific data
@@ -484,7 +489,7 @@ class RoleDashboardView(APIView):
         else:
             role_data = {}
 
-        dashboard_greeting = f"Welcome {role.capitalize()} {username}!"
+        dashboard_greeting = f"Welcome {role.capitalize()} {user.firstname or email.split('@')[0]}!"
         dashboard_data = {
             "dashboard_greeting": dashboard_greeting,
             "tutorial_links": tutorial_links,

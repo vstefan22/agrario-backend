@@ -1,6 +1,6 @@
 from django.db import models
 from django.utils.translation import gettext_lazy as _
-from accounts.models import MarketUser
+from accounts.models import MarketUser, ProjectDeveloper
 from payments.models import PaymentTransaction
 
 class PlatformSubscription(models.Model):
@@ -40,7 +40,7 @@ class ProjectDeveloperSubscription(models.Model):
         YEARLY = "YEA", _("Monatlich")
 
     by_user = models.ForeignKey(
-        to=MarketUser, on_delete=models.SET_NULL,
+        to=ProjectDeveloper, on_delete=models.SET_NULL,
         unique_for_date="valid_from",
         null=True
     )
@@ -62,7 +62,7 @@ class ProjectDeveloperSubscriptionDiscount(models.Model):
     """For timeframes of discounts for users, their subscription fee will be decreased."""
 
     discount_for_user = models.ForeignKey(
-        MarketUser,
+        ProjectDeveloper,
         on_delete=models.SET_NULL, 
         unique_for_date="valid_from",
         null=True
