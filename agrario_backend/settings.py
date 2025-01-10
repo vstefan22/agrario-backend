@@ -33,19 +33,37 @@ DEBUG = os.getenv("DEBUG", "False").lower() == "true"
 
 FRONTEND_URL = os.getenv('FRONTEND_URL')
 BACKEND_URL = os.getenv('BACKEND_URL')
-
-# Stripe
 STRIPE_SECRET_KEY = os.getenv('STRIPE_SECRET_KEY')
-STRIPE_PUBLISHABLE_KEY = os.getenv('STRIPE_PUBLISHABLE_KEY')
-STRIPE_ENDPOINT_SECRET = os.getenv('STRIPE_ENDPOINT_SECRET')
 
-ALLOWED_HOSTS = ["127.0.0.1",
-                 'agrario-backend-cc0a3b9c6ae6.herokuapp.com', 'localhost']
+ALLOWED_HOSTS = ['127.0.0.1',
+                'agrario-backend-cc0a3b9c6ae6.herokuapp.com',
+                'localhost']
 
 
 CSRF_TRUSTED_ORIGINS = [FRONTEND_URL, BACKEND_URL]
 CORS_ALLOWED_ORIGINS = [FRONTEND_URL, BACKEND_URL]
 CORS_ALLOW_CREDENTIALS = True
+
+CORS_ALLOW_HEADERS = [
+    'accept',
+    'accept-encoding',
+    'authorization',
+    'content-type',
+    'dnt',
+    'origin',
+    'user-agent',
+    'x-csrftoken',
+    'x-requested-with',
+]
+
+CORS_ALLOW_METHODS = (
+    "DELETE",
+    "GET",
+    "OPTIONS",
+    "PATCH",
+    "POST",
+    "PUT",
+)
 
 # Swagger settings
 SWAGGER_SETTINGS = {
@@ -82,14 +100,15 @@ INSTALLED_APPS = [
     # custom apps
     'accounts',
     'offers',
-    'subscriptions',
     'payments',
+    'subscriptions',
     'reports',
     'messaging',
-    'invites',
+    'invites', 
 ]
 
 MIDDLEWARE = [
+    "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -97,7 +116,6 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
-    "corsheaders.middleware.CorsMiddleware",
 ]
 
 REST_FRAMEWORK = {
@@ -137,6 +155,7 @@ WSGI_APPLICATION = "agrario_backend.wsgi.application"
 
 
 
+
 # Database
 if DEBUG:
     # POSTGRESQL
@@ -152,7 +171,7 @@ if DEBUG:
     }
 else:
     DATABASES = {
-        'default': dj_database_url.config()
+        'default': dj_database_url.config(engine='django.contrib.gis.db.backends.postgis')
     }
 AUTH_USER_MODEL = 'accounts.MarketUser'
 # Load Firebase credentials
