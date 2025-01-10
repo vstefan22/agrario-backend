@@ -1,0 +1,138 @@
+name: Django CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  test-build:
+    name: Test and Build
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: ufav6e2g8vvcga
+          POSTGRES_PASSWORD: pa48301d496c284ee80258e838b1531f950f963c607bb9a100bf8006a7d0cc7d7
+          POSTGRES_DB: ddcrncnopvagu
+        ports:
+          - 5432:5432
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Install GDAL and Dependencies
+        run: |
+          sudo add-apt-repository -y ppa:ubuntugis/ubuntugis-unstable
+          sudo apt-get update
+          sudo apt-get install -y gdal-bin libgdal-dev
+          which gdal-config || echo "gdal-config not found"
+          export PATH="/usr/bin:$PATH"
+          export GDAL_CONFIG=/usr/bin/gdal-config
+          echo "GDAL_CONFIG=/usr/bin/gdal-config" >> $GITHUB_ENV
+
+      - name: Check GDAL Installation
+        run: |
+          which gdal-config || echo "gdal-config not found"
+          gdal-config --version || echo "gdal-config version check failed"
+          ls -l /usr/include/gdal || echo "GDAL headers not found"
+
+      - name: Install Python Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Install Python Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+  deploy:
+    name: Deploy to Heroku
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Install GDAL and Dependencies
+        run: |
+          sudo add-apt-repository -y ppa:ubuntugis/ubuntugis-unstable
+          sudo apt-get update
+          sudo apt-get install -y gdal-bin libgdal-dev
+          which gdal-config || echo "gdal-config not found"
+          export PATH="/usr/bin:$PATH"
+          export GDAL_CONFIG=/usr/bin/gdal-config
+          echo "GDAL_CONFIG=/usr/bin/gdal-config" >> $GITHUB_ENV
+
+      - name: Check GDAL Installation
+        run: |
+          which gdal-config || echo "gdal-config not found"
+          gdal-config --version || echo "gdal-config version check failed"
+          ls -l /usr/include/gdal || echo "GDAL headers not found"
+
+      - name: Decode Firebase Credentials
+        env:
+          FIREBASE_CREDENTIALS_BASE64: ${{ secrets.FIREBASE_CREDENTIALS_BASE64 }}
+        run: |
+          echo $FIREBASE_CREDENTIALS_BASE64 | base64 -d > firebase-credentials.json
+          echo "FIREBASE_CREDENTIALS_JSON_PATH=firebase-credentials.json" >> $GITHUB_ENV
+
+      - name: Decode Google Credentials
+        env:
+          GOOGLE_CREDENTIALS_BASE64: ${{ secrets.GOOGLE_CREDENTIALS_BASE64 }}
+        run: |
+          echo $GOOGLE_CREDENTIALS_BASE64 | base64 -d > google-credentials.json
+          echo "GOOGLE_CREDENTIALS_JSON_PATH=google-credentials.json" >> $GITHUB_ENV
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Install Heroku CLI
+        run: |
+          curl https://cli-assets.heroku.com/install.sh | sh
+
+      - name: Authenticate Heroku
+        env:
+          HEROKU_API_KEY: ${{ secrets.HEROKU_API_KEY }}
+        run: |
+          echo "machine api.heroku.com login ${{ secrets.HEROKU_API_KEY }}" > ~/.netrc
+          echo "machine git.heroku.com login ${{ secrets.HEROKU_API_KEY }}" >> ~/.netrc
+          chmod 600 ~/.netrc
+          heroku auth:whoami
+
+      - name: Initialize Git Repository
+        run: |
+          git config --global user.email "ci@github.com"
+          git config --global user.name "GitHub Actions"
+          git remote set-branches origin main
+          git fetch --all
+          git checkout main
+          git branch --set-upstream-to=origin/main main
+
+      - name: Set up Git remote for Heroku
+        env:
+          HEROKU_APP_NAME: ${{ secrets.HEROKU_APP_NAME }}
+        run: |
+          git remote add heroku https://heroku:${{ secrets.HEROKU_API_KEY }}@git.heroku.com/${{ secrets.HEROKU_APP_NAME }}.git || echo "Remote already exists"
+
+      - name: Deploy to Heroku
+        run: git push heroku main --force
+
+      - name: Cleanup credentials
+        run: |
+          rm -f firebase-credentials.json google-credentials.json
