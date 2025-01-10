@@ -387,7 +387,7 @@ class ProjectDeveloperSerializer(serializers.ModelSerializer):
     hydrogen = serializers.BooleanField(source="interest.hydrogen", required=False)
     electromobility = serializers.BooleanField(source="interest.electromobility", required=False)
     ecological_upgrading = serializers.BooleanField(source="interest.ecological_upgrading", required=False)
-    other = serializers.CharField(source="interest.other", required=False)
+    other = serializers.CharField(source="interest.other", required=False, allow_blank=True)
 
     class Meta:
         model = ProjectDeveloper
