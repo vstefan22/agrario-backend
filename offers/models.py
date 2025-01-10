@@ -8,9 +8,9 @@ from django.db import models
 from django.db.models import JSONField
 from django.contrib.gis.db import models as gis_models
 import uuid
+from django.core.validators import MinLengthValidator
 from django.db import models
 from django.utils.translation import gettext_lazy as _
-# Replace with the actual user model
 from accounts.models import Landowner, MarketUser
 import random
 
@@ -190,3 +190,15 @@ class AreaOfferAdministration(models.Model):
     )
     notes = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
+
+
+class Region(models.Model):
+
+    name = models.CharField(max_length=64)
+
+    # example 'DE-BW' or see https://en.wikipedia.org/wiki/ISO_3166
+    iso3166 = models.CharField(
+        max_length=5, validators=[MinLengthValidator(5)], null=True, blank=False
+    )
+
+    geom = gis_models.MultiPolygonField(null=True, blank=True)
