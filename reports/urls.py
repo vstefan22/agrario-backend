@@ -1,10 +1,7 @@
-from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from .views import ReportViewSet
+from .views import ReportViewSet, DownloadReportView
 
 router = DefaultRouter()
 router.register(r"", ReportViewSet, basename="report")
 
-urlpatterns = [
-    path("", include(router.urls)),
-]
+urlpatterns = router.urls

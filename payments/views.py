@@ -49,7 +49,7 @@ class CreateStripePaymentView(APIView):
         try:
             # Create a Stripe Payment Intent
             intent = stripe.PaymentIntent.create(
-                amount=int(float(amount) * 100),  # Convert to cents
+                amount = parcel.area_square_meters * settings.ANALYSE_PLUS_RATE,
                 currency=currency,
                 metadata={"user_id": user.id, "parcel_id": parcel_id},  # Include parcel info
             )

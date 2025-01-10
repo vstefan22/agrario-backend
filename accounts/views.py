@@ -4,10 +4,8 @@ Includes views for user registration, login, email confirmation, and role-based 
 """
 
 import logging, requests
-import stripe
 from django.conf import settings
 from django.contrib.auth.tokens import default_token_generator
-from django.contrib.auth import authenticate
 from django.core.mail import send_mail
 from django.http import HttpResponse, JsonResponse
 from django.utils.crypto import get_random_string
@@ -23,9 +21,9 @@ from rest_framework.exceptions import AuthenticationFailed
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from offers.models import AreaOffer, Parcel
-from .models import MarketUser
+from .models import MarketUser, Landowner, ProjectDeveloper
 from .firebase_auth import FirebaseAuthentication, verify_firebase_token, create_firebase_user
-from .serializers import UserRegistrationSerializer, UserSerializer, LandownerProfileSerializer, DeveloperProfileSerializer
+from .serializers import UserSerializer, LandownerSerializer, ProjectDeveloperSerializer, LandownerDashboardSerializer
 from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_encode
 from firebase_admin import auth as firebase_auth
@@ -39,7 +37,6 @@ class MarketUserViewSet(viewsets.ModelViewSet):
     ViewSet for managing MarketUser instances.
     """
     queryset = MarketUser.objects.all()
-    serializer_class = UserRegistrationSerializer
 
     def get_permissions(self):
         """
@@ -48,27 +45,26 @@ class MarketUserViewSet(viewsets.ModelViewSet):
         if self.action in ["create", "confirm_email"]:
             return [AllowAny()]
         return [IsAuthenticated()]
-
-    @swagger_auto_schema(
-        operation_summary="Create a new user",
-        operation_description="Handles user registration, Firebase user creation, and email confirmation.",
-        request_body=UserRegistrationSerializer,
-        responses={
-            201: openapi.Response("User registered successfully. Please confirm your email."),
-            400: "Bad Request - Validation Error",
-        },
-    )
+    
     def create(self, request, *args, **kwargs):
         """
         Handles user registration, Firebase user creation, and email confirmation.
         """
-        serializer = self.get_serializer(data=request.data)
+        role = request.data.get("role")
+        
+        if role == "landowner":
+            serializer_class = LandownerSerializer
+        elif role == "developer":
+            serializer_class = ProjectDeveloperSerializer
+        else:
+            return Response({"error": "Invalid role."}, status=status.HTTP_400_BAD_REQUEST)
+
+        serializer = serializer_class(data=request.data)
         serializer.is_valid(raise_exception=True)
 
         # Extract validated data
         email = serializer.validated_data["email"]
         password = serializer.validated_data["password"]
-        role = serializer.validated_data["role"]
 
         # Create Firebase user
         firebase_user = create_firebase_user(email=email, password=password)
@@ -79,7 +75,7 @@ class MarketUserViewSet(viewsets.ModelViewSet):
         user.is_active = False  # Inactive until email is confirmed
         user.save()
 
-        # Send confirmation email
+        # Send confirmation email (implement your own logic here)
         self.send_confirmation_email(user)
 
         return Response(
@@ -149,6 +145,8 @@ class MarketUserViewSet(viewsets.ModelViewSet):
                 )
             user.is_email_confirmed = True
             user.is_active = True
+            user.privacy_accepted = True
+            user.terms_accepted = True
             user.save()
             return Response(
                 {"message": "Your account has been confirmed successfully. You can log in now."},
@@ -343,81 +341,118 @@ class RoleDashboardView(APIView):
 
     def get_tutorial_links(self, role):
         """
-        Retrieves public links to tutorial videos based on the user's role.
+        Retrieves public links to tutorial videos based on the user's role using dynamic credentials.
         """
         try:
-            storage_client = storage.Client.from_service_account_json(settings.GOOGLE_APPLICATION_CREDENTIALS)
+            from google.cloud import storage
+            from django.conf import settings
+
+            # Initialize Google Cloud Storage client using GS_CREDENTIALS
+            storage_client = storage.Client(credentials=settings.GS_CREDENTIALS, project=settings.G_CLOUD_PROJECT_ID)
             bucket = storage_client.bucket(settings.G_CLOUD_BUCKET_NAME_STATIC)
 
-            # Use the configurable prefix
-            prefix = settings.TUTORIAL_LINK_PREFIX.format(role=role)
-            logger.info(f"Fetching files from bucket with prefix: {prefix}")
-
+            # Correct prefix based on folder structure
+            prefix = f"tutorials/{role}/"
             blobs = bucket.list_blobs(prefix=prefix)
-            tutorial_links = []
 
-            for blob in blobs:
-                logger.info(f"Found blob: {blob.name}")
-                if not blob.name.endswith("/"):  # Ignore directories
-                    tutorial_links.append(blob.public_url)
+            # Collect public URLs for the files
+            tutorial_links = [blob.public_url for blob in blobs if not blob.name.endswith("/")]
 
+            # Log if no files were found
             if not tutorial_links:
-                logger.warning(f"No tutorials found for role: {role}")
+                logger.warning(f"No tutorial videos found for role: {role} in bucket with prefix: {prefix}")
+
             return tutorial_links
         except Exception as e:
             logger.error(f"Error retrieving tutorial links for role '{role}': {e}")
             return []
 
-    @swagger_auto_schema(
-        tags=["Dashboard"],
-        operation_summary="Get Dashboard",
-        operation_description=(
-            "Retrieve role-specific dashboard data along with tutorial links. "
-            "The user's role determines the content of the dashboard. "
-            "Includes a list of tutorial videos hosted on Google Cloud Storage."
-        ),
-        responses={
-            200: openapi.Response(
-                description="Role-specific dashboard data.",
-                examples={
-                    "application/json": {
-                        "dashboard_greeting": "Welcome Landowner JohnDoe!",
-                        "tutorial_links": [
-                            "https://storage.googleapis.com/agrario-static/tutorials/tutorial1.mp4",
-                            "https://storage.googleapis.com/agrario-static/tutorials/tutorial2.mp4",
-                        ],
-                    }
-                },
-            ),
-            401: openapi.Response(
-                description="Unauthorized - Invalid or missing authentication token.",
-                examples={
-                    "application/json": {
-                        "error": "Authentication token not provided."
-                    }
-                },
-            ),
-            403: openapi.Response(
-                description="Forbidden - User account inactive.",
-                examples={
-                    "application/json": {
-                        "error": "User account is inactive."
-                    }
-                },
-            ),
-            404: openapi.Response(
-                description="Not Found - User does not exist.",
-                examples={
-                    "application/json": {
-                        "error": "User does not exist."
-                    }
-                },
-            ),
-        },
-    )
+   
+    
+    def get_landowner_data(self, user):
+        """
+        Fetch additional dashboard data for landowners.
+        """
+        parcels_owned = user.created_parcels.count()
+        parcels_pending_analysis = user.created_parcels.filter(status="pending_analysis").count()
+
+        # Fetch unread messages count
+        from messaging.models import Message  # Replace with the correct model path
+        unread_messages = Message.objects.filter(sender=user, is_read=False).count()
+
+        return {
+            "parcels_owned": parcels_owned,
+            "parcels_pending_analysis": parcels_pending_analysis,
+            "notifications": {
+                "unread_messages": unread_messages,
+            },
+        }
+    
+    def get_developer_data(self, user):
+        """
+        Fetch additional dashboard data for developers.
+        """
+        active_projects = user.projects.filter(status="active").count()  # Assuming `projects` is a related name
+        projects_pending_approval = user.projects.filter(status="pending_approval").count()
+        notifications = []  # Fetch notifications if implemented
+
+        return {
+            "active_projects": active_projects,
+            "projects_pending_approval": projects_pending_approval,
+            "notifications": notifications,
+        }
+    # def get(self, request):
+    #     """
+    #     Retrieve dashboard data based on the user's role and include tutorial links.
+    #     """
+    #     auth_header = request.headers.get("Authorization")
+    #     if not auth_header or not auth_header.startswith("Bearer "):
+    #         return Response({"error": "Authentication token not provided."}, status=status.HTTP_401_UNAUTHORIZED)
+
+    #     token = auth_header.split("Bearer ")[1]
+    #     decoded_token = verify_firebase_token(token)
+
+    #     if not decoded_token:
+    #         logger.warning("Failed to decode token or token expired.")
+    #         return Response({"error": "Invalid or expired Firebase token."}, status=status.HTTP_401_UNAUTHORIZED)
+
+    #     email = decoded_token.get("email")
+    #     try:
+    #         user = MarketUser.objects.get(email=email)
+    #     except MarketUser.DoesNotExist:
+    #         return Response({"error": "User does not exist."}, status=status.HTTP_404_NOT_FOUND)
+
+    #     if not user.is_active:
+    #         return Response({"error": "User account is inactive."}, status=status.HTTP_403_FORBIDDEN)
+
+    #     # Fetch user role and tutorial links
+    #     role = get_user_role(decoded_token, email)
+
+    #     # Use the first part of the email as a placeholder for the username if it's None
+    #     username = user.firstname or email.split("@")[0]
+    #     tutorial_links = self.get_tutorial_links(role)
+
+    #     # Fetch role-specific data
+    #     if role == "landowner":
+    #         role_data = self.get_landowner_data(user)
+    #     elif role == "developer":
+    #         role_data = self.get_developer_data(user)
+    #     else:
+    #         role_data = {}
+
+    #     dashboard_greeting = f"Welcome {role.capitalize()} {username}!"
+    #     dashboard_data = {
+    #         "dashboard_greeting": dashboard_greeting,
+    #         "tutorial_links": tutorial_links,
+    #         "role": role,
+    #         **role_data,
+    #     }
+
+    #     return Response(dashboard_data, status=status.HTTP_200_OK)
+
     def get(self, request):
         """
-        Retrieve dashboard data based on the user's role and include tutorial links.
+        Retrieve dashboard data based on the user's role.
         """
         auth_header = request.headers.get("Authorization")
         if not auth_header or not auth_header.startswith("Bearer "):
@@ -425,9 +460,8 @@ class RoleDashboardView(APIView):
 
         token = auth_header.split("Bearer ")[1]
         decoded_token = verify_firebase_token(token)
-        
+
         if not decoded_token:
-            logger.warning("Failed to decode token or token expired.")
             return Response({"error": "Invalid or expired Firebase token."}, status=status.HTTP_401_UNAUTHORIZED)
 
         email = decoded_token.get("email")
@@ -439,19 +473,26 @@ class RoleDashboardView(APIView):
         if not user.is_active:
             return Response({"error": "User account is inactive."}, status=status.HTTP_403_FORBIDDEN)
 
-        # Fallback to user model's role if not in the token
-        # role = decoded_token.get("role") or user.role
-        role = get_user_role(decoded_token, email)
+        # Correctly derive the role as a string
+        role = user.role.lower()  # Ensure the role is in lowercase
 
-        # Use the first part of the email as a placeholder for the username if it's None
-        username = user.firstname or email.split("@")[0]
+        # Fetch tutorial links for the normalized role
         tutorial_links = self.get_tutorial_links(role)
-        dashboard_greeting = f"Welcome {role} {username}!"
 
+        # Fetch role-specific data
+        if role == "landowner":
+            role_data = self.get_landowner_data(user)
+        elif role == "developer":
+            role_data = self.get_developer_data(user)
+        else:
+            role_data = {}
+
+        dashboard_greeting = f"Welcome {role.capitalize()} {user.firstname or email.split('@')[0]}!"
         dashboard_data = {
             "dashboard_greeting": dashboard_greeting,
             "tutorial_links": tutorial_links,
             "role": role,
+            **role_data,
         }
 
         return Response(dashboard_data, status=status.HTTP_200_OK)
@@ -460,71 +501,151 @@ class MarketUserProfileView(viewsets.ViewSet):
     """
     ViewSet for managing MarketUser profiles, dynamically choosing serializers based on user role.
     """
+
     permission_classes = [IsAuthenticated]
 
-    def get_serializer_class(self, user):
+    @staticmethod
+    def get_serializer_class(user):
         """
         Dynamically select the serializer based on the user's role.
+
+        Args:
+            user (MarketUser): The authenticated user.
+
+        Returns:
+            Serializer class based on the user's role or None if unsupported.
         """
         if user.role == "landowner":
-            return LandownerProfileSerializer
-        elif user.role == "developer":
-            return DeveloperProfileSerializer
+            return LandownerSerializer
+        if user.role == "developer":
+            return ProjectDeveloperSerializer
         return None
 
-    def get_user(self, request):
+    @staticmethod
+    def get_authenticated_user(request):
         """
         Retrieve the authenticated user based on the Firebase token.
+
+        Args:
+            request: The HTTP request object.
+
+        Returns:
+            MarketUser instance or Response with error message.
         """
         auth_header = request.headers.get("Authorization")
         if not auth_header or not auth_header.startswith("Bearer "):
-            return Response({"error": "Authentication token not provided."}, status=401)
+            return Response({"error": "Authentication token not provided."}, status=status.HTTP_401_UNAUTHORIZED)
 
         token = auth_header.split("Bearer ")[1]
         decoded_token = verify_firebase_token(token)
         if not decoded_token:
-            return Response({"error": "Invalid or expired Firebase token."}, status=401)
+            return Response({"error": "Invalid or expired Firebase token."}, status=status.HTTP_401_UNAUTHORIZED)
 
         email = decoded_token.get("email")
         if not email:
-            return Response({"error": "Email not found in token."}, status=401)
+            return Response({"error": "Email not found in token."}, status=status.HTTP_401_UNAUTHORIZED)
 
         try:
             return MarketUser.objects.get(email=email)
         except MarketUser.DoesNotExist:
-            return Response({"error": "User does not exist."}, status=404)
+            return Response({"error": "User does not exist."}, status=status.HTTP_404_NOT_FOUND)
+        
+    @swagger_auto_schema(
+        operation_summary="Retrieve User Profile",
+        operation_description="Get profile details of the authenticated user based on their role.",
+        responses={
+            200: openapi.Response(description="User profile data", examples={"application/json": {"key": "value"}}),
+            401: openapi.Response(description="Authentication token not provided or invalid"),
+            404: openapi.Response(description="User not found"),
+        },
+    )
 
     def retrieve(self, request, *args, **kwargs):
         """
         Retrieve the profile details of the authenticated user.
         """
-        user = self.get_user(request)
+        user = self.get_authenticated_user(request)
         if isinstance(user, Response):
             return user
 
-        serializer_class = self.get_serializer_class(user)
-        if not serializer_class:
-            return Response({"error": "Unsupported role."}, status=400)
+        if user.role == "landowner":
+            try:
+                user_instance = Landowner.objects.get(identifier=user.identifier)
+            except Landowner.DoesNotExist:
+                return Response({"error": "Landowner instance not found."}, status=status.HTTP_404_NOT_FOUND)
+        elif user.role == "developer":
+            try:
+                user_instance = ProjectDeveloper.objects.filter(identifier=user.identifier).select_related("interest").first()
+            except ProjectDeveloper.DoesNotExist:
+                return Response({"error": "Developer instance not found."}, status=status.HTTP_404_NOT_FOUND)
+        else:
+            return Response({"error": "Unsupported role."}, status=status.HTTP_400_BAD_REQUEST)
 
-        serializer = serializer_class(user)
-        return Response(serializer.data, status=200)
+        serializer_class = self.get_serializer_class(user_instance)
+        if not serializer_class:
+            return Response({"error": "Unsupported role."}, status=status.HTTP_400_BAD_REQUEST)
+
+        serializer = serializer_class(user_instance)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    
+    @swagger_auto_schema(
+        operation_summary="Update User Profile",
+        operation_description="Update profile details of the authenticated user based on their role.",
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            properties={
+                "first_name": openapi.Schema(type=openapi.TYPE_STRING, description="First name"),
+                "last_name": openapi.Schema(type=openapi.TYPE_STRING, description="Last name"),
+                "phone_number": openapi.Schema(type=openapi.TYPE_STRING, description="Phone number"),
+                "address": openapi.Schema(type=openapi.TYPE_STRING, description="Address"),
+            },
+        ),
+        responses={
+            200: openapi.Response(description="Profile updated successfully"),
+            401: openapi.Response(description="Authentication token not provided or invalid"),
+            400: openapi.Response(description="Validation errors or unsupported role"),
+        },
+    )
 
     def partial_update(self, request, *args, **kwargs):
         """
         Update the profile details of the authenticated user.
+
+        Args:
+            request: The HTTP request object.
+
+        Returns:
+            Response containing the updated profile data or an error message.
         """
-        user = self.get_user(request)
+        user = self.get_authenticated_user(request)
         if isinstance(user, Response):
             return user
 
-        serializer_class = self.get_serializer_class(user)
-        if not serializer_class:
-            return Response({"error": "Unsupported role."}, status=400)
+        # Fetch the correct subclass instance (Landowner or Developer)
+        if user.role == "landowner":
+            try:
+                user_instance = Landowner.objects.get(identifier=user.identifier)
+            except Landowner.DoesNotExist:
+                return Response({"error": "Landowner instance not found."}, status=status.HTTP_404_NOT_FOUND)
+        elif user.role == "developer":
+            try:
+                user_instance = ProjectDeveloper.objects.filter(identifier=user.identifier).select_related("interest").first()
+            except ProjectDeveloper.DoesNotExist:
+                return Response({"error": "Developer instance not found."}, status=status.HTTP_404_NOT_FOUND)
+        else:
+            return Response({"error": "Unsupported role."}, status=status.HTTP_400_BAD_REQUEST)
 
-        serializer = serializer_class(user, data=request.data, partial=True)
+        # Get the serializer class for the specific user role
+        serializer_class = self.get_serializer_class(user_instance)
+        if not serializer_class:
+            return Response({"error": "Unsupported role."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Pass the specific subclass instance to the serializer
+        serializer = serializer_class(user_instance, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         serializer.save()
-        return Response(serializer.data, status=200)
+
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
 
 
@@ -561,30 +682,7 @@ class FirebasePasswordResetRequestView(APIView):
             ),
         },
     )
-    # def post(self, request):
-    #     """
-    #     Sends a password reset email to the user using Firebase.
-    #     """
-    #     email = request.data.get("email")
-    #     if not email:
-    #         return Response({"error": "Email is required."}, status=status.HTTP_400_BAD_REQUEST)
-
-    #     firebase_api_key = settings.FIREBASE_API_KEY
-    #     url = f"https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key={firebase_api_key}"
-
-    #     payload = {
-    #         "requestType": "PASSWORD_RESET",
-    #         "email": email,
-    #     }
-
-    #     response = requests.post(url, json=payload)
-    #     if response.status_code == 200:
-    #         return Response({"message": "Password reset email sent successfully."}, status=status.HTTP_200_OK)
-
-    #     return Response(
-    #         {"error": "Failed to send password reset email. Please check the email address."},
-    #         status=status.HTTP_400_BAD_REQUEST,
-    #     )
+ 
     def post(self, request):
         email = request.data.get("email")
 

@@ -114,6 +114,7 @@ INSTALLED_APPS = [
     'subscriptions',
     'reports',
     'messaging',
+    'invites', 
 ]
 
 MIDDLEWARE = [
@@ -163,8 +164,10 @@ WSGI_APPLICATION = "agrario_backend.wsgi.application"
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
 
 
+
+
 # Database
-if not DEBUG:
+if DEBUG:
     # POSTGRESQL
     DATABASES = {
         'default': {
@@ -176,10 +179,24 @@ if not DEBUG:
             'PORT': os.getenv("DATABASE_PORT"),
         }
     }
-else:
-    DATABASES = {
-        'default': dj_database_url.config(engine='django.contrib.gis.db.backends.postgis')
-    }
+
+# Database
+# if not DEBUG:
+#     # POSTGRESQL
+#     DATABASES = {
+#         'default': {
+#             'ENGINE': 'django.contrib.gis.db.backends.postgis',
+#             'NAME': os.getenv("DATABASE_NAME"),
+#             'USER': os.getenv("DATABASE_USER"),
+#             'PASSWORD': os.getenv("DATABASE_PASSWORD"),
+#             'HOST': os.getenv("DATABASE_HOST"),
+#             'PORT': os.getenv("DATABASE_PORT"),
+#         }
+#     }
+# else:
+#     DATABASES = {
+#         'default': dj_database_url.config(engine='django.contrib.gis.db.backends.postgis')
+#     }
 AUTH_USER_MODEL = 'accounts.MarketUser'
 # Load Firebase credentials
 firebase_credentials_path = os.getenv("FIREBASE_CREDENTIALS_JSON_PATH")
@@ -227,6 +244,9 @@ except Exception as e:
     logging.error(f"Error loading Google Cloud credentials: {e}")
     raise
 
+G_CLOUD_PROJECT_ID = os.getenv("G_CLOUD_PROJECT_ID")
+G_CLOUD_BUCKET_NAME_MEDIA = os.getenv("G_CLOUD_BUCKET_NAME_MEDIA")
+G_CLOUD_BUCKET_NAME_STATIC = os.getenv("G_CLOUD_BUCKET_NAME_STATIC")
 STORAGES = {
     "default": {
         "BACKEND": "storages.backends.gcloud.GoogleCloudStorage",
@@ -246,8 +266,8 @@ STORAGES = {
     },
 }
 
-# GDAL_LIBRARY_PATH = r"C:\Users\gacic\anaconda3\envs\agrario_env\Library\bin\gdal.dll"
-# GEOS_LIBRARY_PATH  = r"C:\Users\gacic\anaconda3\envs\agrario_env\Library\bin\geos_c.dll"
+GDAL_LIBRARY_PATH = r"C:\Users\gacic\anaconda3\envs\agrario_env\Library\bin\gdal.dll"
+GEOS_LIBRARY_PATH  = r"C:\Users\gacic\anaconda3\envs\agrario_env\Library\bin\geos_c.dll"
 
 # Static files configuration
 STATIC_URL = "static/"
