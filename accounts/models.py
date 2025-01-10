@@ -174,4 +174,4 @@ class ProjectDeveloperInterest(models.Model):
 
     ecological_upgrading = models.BooleanField()
 
-    other = models.CharField(max_length=50)
+    other = models.CharField(max_length=50, blank=True)
