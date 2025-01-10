@@ -133,10 +133,11 @@ class ProjectDeveloper(MarketUser):
         company_website: Optional website URL of the company.
     """
 
+    company_logo = models.FileField(
+        upload_to="company_logos/", null=True, blank=True)
     interest = models.ForeignKey(
         to="ProjectDeveloperInterest", on_delete=models.CASCADE
     )
-
     states_active = models.ManyToManyField(to="Region")
 
     class Meta:
