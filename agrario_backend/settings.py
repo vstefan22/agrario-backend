@@ -35,13 +35,23 @@ FRONTEND_URL = os.getenv('FRONTEND_URL')
 BACKEND_URL = os.getenv('BACKEND_URL')
 STRIPE_SECRET_KEY = os.getenv('STRIPE_SECRET_KEY')
 
-ALLOWED_HOSTS = ['127.0.0.1',
-                'agrario-backend-cc0a3b9c6ae6.herokuapp.com',
-                'localhost']
+ALLOWED_HOSTS = [
+    '127.0.0.1',
+    'localhost',
+    'agrario-backend-cc0a3b9c6ae6.herokuapp.com',
+    'agrario-frontend-woad.vercel.app'
+]
 
-
-CSRF_TRUSTED_ORIGINS = [FRONTEND_URL, BACKEND_URL]
-CORS_ALLOWED_ORIGINS = [FRONTEND_URL, BACKEND_URL]
+CSRF_TRUSTED_ORIGINS = [
+    FRONTEND_URL,
+    BACKEND_URL,
+    'https://agrario-frontend-woad.vercel.app'
+]
+CORS_ALLOWED_ORIGINS = [
+    FRONTEND_URL,
+    BACKEND_URL,
+    'https://agrario-frontend-woad.vercel.app'
+]
 CORS_ALLOW_CREDENTIALS = True
 
 CORS_ALLOW_HEADERS = [
