@@ -403,7 +403,7 @@ class ProjectDeveloperSerializer(serializers.ModelSerializer):
             "city",
             "company_name",
             "company_website",
-            "profile_picture",
+            "company_logo",
             "password",
             "confirm_password",
             "wind",
