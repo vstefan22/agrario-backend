@@ -3,6 +3,7 @@
 Defines serializers for users, landowners, project developers, and dashboards.
 """
 
+import logging
 from django.contrib.auth.password_validation import validate_password
 from django.contrib.auth.tokens import default_token_generator
 from django.core.mail import send_mail
@@ -13,11 +14,12 @@ from django.utils.translation import gettext_lazy as _
 from rest_framework import serializers
 from rest_framework.response import Response
 from rest_framework import status
-from offers.models import AreaOffer, Parcel
 from offers.serializers import AreaOfferSerializer, ParcelSerializer
-
-from .models import Landowner, MarketUser, ProjectDeveloper
-from .models import Landowner, MarketUser, ProjectDeveloper
+from django.conf import settings
+from django.urls import reverse
+logger = logging.getLogger(__name__)
+from .models import Landowner, MarketUser, ProjectDeveloper, ProjectDeveloperInterest
+from offers.models import AreaOffer
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -91,6 +93,7 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
     """
     Serializer for user registration with mandatory field validation.
     """
+    confirm_password = serializers.CharField(write_only=True, required=True)  # Explicitly declare it here
     invite_code = serializers.CharField(write_only=True, required=False)
     role = serializers.ChoiceField(choices=MarketUser.ROLE_CHOICES)
 
@@ -101,6 +104,7 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
             "lastname",
             "email",
             "password",
+            "confirm_password",
             "invite_code",
             "role",
             "phone_number",
@@ -110,6 +114,8 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
             "profile_picture",
             "zipcode",
             "city",
+            "privacy_accepted",
+            "terms_accepted",
         ]
         extra_kwargs = {
             "email": {"required": True},
@@ -120,6 +126,10 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
         """
         Validate that mandatory fields are filled.
         """
+        # Validate password confirmation
+        if attrs["password"] != self.initial_data.get("confirm_password"):
+            raise serializers.ValidationError({"password": "Passwords do not match."})
+
         mandatory_fields = ["email", "password", "role"]
         if attrs.get("role") == "landowner":
             mandatory_fields.extend(
@@ -166,8 +176,6 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
         """
         Generate and send an email confirmation link to the user.
         """
-        from django.conf import settings
-        from django.urls import reverse
 
         token = default_token_generator.make_token(user)
         uid = urlsafe_base64_encode(force_bytes(user.pk))
@@ -225,37 +233,98 @@ class LoginSerializer(serializers.Serializer):
 
 class LandownerDashboardSerializer(serializers.ModelSerializer):
     """
-    Serializer for Landowner dashboard data.
-
-    Provides details about parcels and offers related to the landowner.
+    Serializer for Landowner Dashboard data.
+    Provides greeting, quick action links, notifications, and statistics.
     """
 
-    parcels = serializers.SerializerMethodField()
-    offers = serializers.SerializerMethodField()
+    # Tutorials
+    tutorial_links = serializers.SerializerMethodField()
+
+    # Notifications
+    notifications = serializers.SerializerMethodField()
+
+    # Parcels Overview
+    statistics = serializers.SerializerMethodField()
 
     class Meta:
         model = Landowner
-        fields = ["id", "username", "email", "parcels", "offers"]
+        fields = [
+            "firstname",        # For personalized greeting
+            "tutorial_links",   # List of tutorial video URLs
+            "notifications",    # Notifications and unread message counts
+            "statistics",       # Parcel statistics
+        ]
 
-    def get_parcels(self, obj):
+    def get_tutorial_links(self, role):
         """
-        Retrieve parcels created by the landowner.
+        Retrieves public links to tutorial videos based on the normalized role.
         """
-        parcels = Parcel.objects.filter(created_by=obj)
-        return ParcelSerializer(parcels, many=True).data
+        try:
+            from google.cloud import storage
+            from django.conf import settings
 
-    def get_offers(self, obj):
+            # Ensure the role is normalized to a string
+            if not isinstance(role, str):
+                raise ValueError(f"Expected a string for role, got {type(role).__name__}")
+
+            normalized_role = role.lower().strip()  # Normalize role to match bucket structure
+
+            # Initialize Google Cloud Storage client using credentials
+            storage_client = storage.Client(
+                credentials=settings.GS_CREDENTIALS, project=settings.G_CLOUD_PROJECT_ID
+            )
+            bucket = storage_client.bucket(settings.G_CLOUD_BUCKET_NAME_STATIC)
+
+            # Construct the prefix
+            prefix = f"tutorials/{normalized_role}/"
+            blobs = bucket.list_blobs(prefix=prefix)
+
+            # Collect public URLs
+            tutorial_links = [blob.public_url for blob in blobs if not blob.name.endswith("/")]
+
+            # Log if no files are found
+            if not tutorial_links:
+                logger.warning(
+                    f"No tutorial videos found for role: {normalized_role} in bucket with prefix: {prefix}"
+                )
+
+            return tutorial_links
+        except Exception as e:
+            logger.error(f"Error retrieving tutorial links for role '{role}': {e}")
+            return []
+        
+    def get_notifications(self, obj):
         """
-        Retrieve area offers created by the landowner.
+        Retrieve notifications (unread messages).
         """
-        offers = AreaOffer.objects.filter(created_by=obj)
-        return AreaOfferSerializer(offers, many=True).data
+        from messaging.models import Message  # Replace with actual model path
+
+        unread_messages = Message.objects.filter(sender=obj, is_read=False).count()
+        return {
+            "unread_messages": unread_messages
+        }
+
+    def get_statistics(self, obj):
+        """
+        Return parcel statistics (owned and pending analysis).
+        """
+        return {
+            "parcels_owned": obj.created_parcels.count(),
+            "parcels_pending_analysis": obj.created_parcels.filter(status="pending_analysis").count(),
+        }
 
 
-class LandownerProfileSerializer(serializers.ModelSerializer):
+
+class LandownerSerializer(serializers.ModelSerializer):
     """
     Serializer for Landowner-specific profile details.
     """
+
+    password = serializers.CharField(
+        write_only=True, required=True, validators=[validate_password]
+    )
+    confirm_password = serializers.CharField(write_only=True, required=True)
+
     class Meta:
         model = Landowner
         fields = [
@@ -265,23 +334,61 @@ class LandownerProfileSerializer(serializers.ModelSerializer):
             "email",
             "phone_number",
             "address",
-            "role",
-            "is_email_confirmed",
-            "password",
+            "zipcode",
+            "city",
             "company_name",
             "company_website",
-            "city",
-            "zipcode",
             "profile_picture",
-            "position"
+            "position",
+            "password",
+            "confirm_password",
+            "role",
         ]
-        read_only_fields = ["id", "email", "is_email_confirmed"]
+        read_only_fields = ["id"]
+
+    def validate(self, attrs):
+        """
+        Validate that passwords match and required fields are present for create.
+        """
+        if self.instance:  # During update, skip mandatory field checks
+            return attrs
+
+        # Validate passwords during creation
+        if attrs.get("password") != attrs.get("confirm_password"):
+            raise serializers.ValidationError({"password": "Passwords do not match."})
+
+        # Check for mandatory fields during creation
+        mandatory_fields = ["email", "phone_number", "address", "zipcode", "city"]
+        for field in mandatory_fields:
+            if not attrs.get(field):
+                raise serializers.ValidationError({field: f"{field} is required."})
+
+        return attrs
+
+    def create(self, validated_data):
+        """
+        Create a new Landowner.
+        """
+        validated_data.pop("confirm_password")
+        return Landowner.objects.create_user(**validated_data)
 
 
-class DeveloperProfileSerializer(serializers.ModelSerializer):
+class ProjectDeveloperSerializer(serializers.ModelSerializer):
     """
-    Serializer for ProjectDeveloper-specific profile details.
+    Serializer for ProjectDeveloper-specific profile details with embedded interest fields.
     """
+    email = serializers.EmailField(required=True)
+    password = serializers.CharField(write_only=True, required=True)
+    confirm_password = serializers.CharField(write_only=True, required=True)
+    wind = serializers.BooleanField(source="interest.wind", required=False)
+    ground_mounted_solar = serializers.BooleanField(source="interest.ground_mounted_solar", required=False)
+    battery = serializers.BooleanField(source="interest.battery", required=False)
+    heat = serializers.BooleanField(source="interest.heat", required=False)
+    hydrogen = serializers.BooleanField(source="interest.hydrogen", required=False)
+    electromobility = serializers.BooleanField(source="interest.electromobility", required=False)
+    ecological_upgrading = serializers.BooleanField(source="interest.ecological_upgrading", required=False)
+    other = serializers.CharField(source="interest.other", required=False)
+
     class Meta:
         model = ProjectDeveloper
         fields = [
@@ -294,12 +401,66 @@ class DeveloperProfileSerializer(serializers.ModelSerializer):
             "address",
             "zipcode",
             "city",
-            "company_name",  # Developer-specific attribute
-            "company_website",  # Developer-specific attribute
-            "is_email_confirmed",
+            "company_name",
+            "company_website",
+            "profile_picture",
+            "password",
+            "confirm_password",
+            "wind",
+            "ground_mounted_solar",
+            "battery",
+            "heat",
+            "hydrogen",
+            "electromobility",
+            "ecological_upgrading",
+            "other",
+            "role",
         ]
-        read_only_fields = ["id", "email", "is_email_confirmed"]
+        read_only_fields = ["id", "email"]
 
+    def validate(self, attrs):
+        """
+        Validate that passwords match and required fields are present.
+        """
+        if attrs.get("password") != attrs.get("confirm_password"):
+            raise serializers.ValidationError({"password": "Passwords do not match."})
+
+        return attrs
+
+    def create(self, validated_data):
+        """
+        Create a new ProjectDeveloper instance and associated ProjectDeveloperInterest.
+        """
+        # Extract interest-related fields
+        interest_data = validated_data.pop("interest", {})
+
+        # Create ProjectDeveloperInterest instance
+        interest = ProjectDeveloperInterest.objects.create(**interest_data)
+
+        # Remove confirm_password
+        validated_data.pop("confirm_password")
+
+        # Create ProjectDeveloper instance
+        developer = ProjectDeveloper.objects.create_user(interest=interest, **validated_data)
+
+        return developer
+
+    def update(self, instance, validated_data):
+        """
+        Update the ProjectDeveloper instance and its associated interest fields.
+        """
+        # Extract and update interest fields if present
+        interest_data = validated_data.pop("interest", {})
+        for attr, value in interest_data.items():
+            setattr(instance.interest, attr, value)
+        instance.interest.save()
+
+        # Update other fields on the ProjectDeveloper instance
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+
+        return instance
 
 class DeveloperDashboardSerializer(serializers.ModelSerializer):
     """
