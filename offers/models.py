@@ -101,18 +101,19 @@ class AreaOffer(models.Model):
 
     identifier = models.UUIDField(
         primary_key=True, default=uuid.uuid4, editable=False)
+
     offer_number = models.PositiveIntegerField(
         auto_created=True, unique=True, editable=False)
-    title = models.CharField(max_length=255)
-    description = models.TextField()
+    # title = models.CharField(max_length=255)
+    # description = models.TextField()
     # Dynamic key-value pairs
     criteria = models.JSONField(default=dict, blank=True)
 
     class OfferStatus(models.TextChoices):
-        IN_PREPARATION = "V", _("In Preparation")
-        PREPARED = "P", _("Prepared")
-        ACTIVE = "A", _("Active")
-        INACTIVE = "I", _("Inactive")
+        IN_PREPARATION = "V", _("In Vorbereitung")  # after creation
+        PREPARED = "P", _("Vorprüfung abgeschlossen")
+        ACTIVE = "A", _("Aktiv")
+        INACTIVE = "I", _("Inaktiv")
 
     status = models.CharField(
         max_length=2, choices=OfferStatus.choices, default=OfferStatus.IN_PREPARATION
@@ -124,15 +125,12 @@ class AreaOffer(models.Model):
     available_from = models.DateField()
 
     def save(self, *args, **kwargs):
-        if self.offer_number is None:  # Generate only if not already set
+        if not self.offer_number:
             self.offer_number = self.generate_offer_number()
         super().save(*args, **kwargs)
 
     @staticmethod
     def generate_offer_number():
-        """
-        Generate a unique 6-digit offer number.
-        """
         while True:
             offer_number = random.randint(100000, 999999)
             if not AreaOffer.objects.filter(offer_number=offer_number).exists():
@@ -146,9 +144,31 @@ class AreaOffer(models.Model):
     utilization = models.CharField(
         max_length=2, choices=AreaUtilization.choices, default=AreaUtilization.NO_RESTRICTION
     )
+    
+    # excluded_landuse = models.ManyToManyField(Landuse, related_name="offers")
+    
+    class DeveloperRegionality(models.TextChoices):
+        NO_RESTRICTION = "NO", _("Keine Einschränkung")
+        GERMANY = "DE", _("Firmensitz in Deutschland")
+        FEDERAL_STATE = "BL", _("Firmensitz im Bundesland des Grundstücks")
+
+    preferred_regionality = models.TextField(
+        choices=DeveloperRegionality, default=DeveloperRegionality.NO_RESTRICTION
+    )
+    class ShareholderModel(models.TextChoices):
+        NO_RESTRICTION = "NO", _("Keine Einschränkung")
+        SHARES_INCOME = "IN", _("Beteiligungen am Erlös")
+        SHARES_COMPANY = "CO", _("Beteiligungen an der Projektgesellschaft")
+        BOTH = "BO", _("Beides")
+
+    shareholder_model = models.TextField(
+        choices=ShareholderModel, default=ShareholderModel.NO_RESTRICTION
+    )
+    
+    important_remarks = models.TextField()
 
     def __str__(self):
-        return f"{self.title} (#{self.offer_number})"
+        return f"Offer #{self.offer_number}"
 
 
 class AreaOfferDocuments(models.Model):

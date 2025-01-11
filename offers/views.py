@@ -11,7 +11,7 @@ from rest_framework.decorators import action
 from rest_framework.permissions import BasePermission, IsAuthenticated
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
-from rest_framework.parsers import MultiPartParser
+from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from accounts.models import MarketUser
 from payments.models import PaymentTransaction
 from reports.models import Report
@@ -518,82 +518,35 @@ class ParcelOwnershipPermission(IsAuthenticated):
 
 
 class AreaOfferViewSet(viewsets.ModelViewSet):
-    """
-    ViewSet for managing AreaOffer instances.
-    """
     queryset = AreaOffer.objects.all()
     serializer_class = AreaOfferSerializer
     permission_classes = [FirebaseIsAuthenticated]
 
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
+
     def perform_create(self, serializer):
-        """
-        Automatically associate the created offer with the current user.
-        """
-        user = self.request.user
-        serializer.save(created_by=user)
+        offer = serializer.save()
+        self._handle_uploaded_files(offer)
+        offer.refresh_from_db()
 
-    def retrieve(self, request, *args, **kwargs):
-        """
-        Retrieve the details of an area offer.
-        """
-        offer = self.get_object()
-        serializer = self.get_serializer(offer)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+    def perform_update(self, serializer):
+        offer = serializer.save()
+        self._handle_uploaded_files(offer)
 
-    @action(detail=True, methods=["patch"])
-    def update_criteria(self, request, pk=None):
-        """
-        Update criteria such as title, description, or utilization.
-        """
-        offer = self.get_object()
-        if offer.created_by != request.user:
-            return Response(
-                {"error": "You are not allowed to update this offer."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
-        serializer = self.get_serializer(offer, data=request.data, partial=True)
-        if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data, status=status.HTTP_200_OK)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    
-    @action(detail=True, methods=["post"], parser_classes=[MultiPartParser])
-    def upload_document(self, request, pk=None):
-        """
-        Upload a document for the specified AreaOffer.
-        """
-        try:
-            offer = self.get_object()
-        except AreaOffer.DoesNotExist:
-            return Response({"error": "AreaOffer not found."}, status=status.HTTP_404_NOT_FOUND)
+        offer.refresh_from_db()
 
-        document_file = request.FILES.get("document")
-        if not document_file:
-            return Response({"error": "No file provided."}, status=status.HTTP_400_BAD_REQUEST)
-
-        # Create a new document instance and link it to the AreaOffer
-        AreaOfferDocuments.objects.create(offer=offer, document=document_file)
-
-        return Response({"message": "Document uploaded successfully."}, status=status.HTTP_201_CREATED)
-    
     @action(detail=True, methods=["post"], permission_classes=[IsAuthenticated])
     def prepare_offer(self, request, pk=None):
-        """
-        Prepare an offer with criteria and additional files.
-        """
         offer = self.get_object()
-        data = request.data
-        serializer = self.get_serializer(offer, data=data, partial=True)
+        serializer = self.get_serializer(offer, data=request.data, partial=True)
         if serializer.is_valid():
-            serializer.save()
+            offer = serializer.save()
+            self._handle_uploaded_files(offer)
             return Response(serializer.data, status=status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     @action(detail=True, methods=["post"])
     def deactivate(self, request, pk=None):
-        """
-        Deactivate an offer.
-        """
         offer = self.get_object()
         if offer.created_by != request.user:
             return Response(
@@ -602,44 +555,31 @@ class AreaOfferViewSet(viewsets.ModelViewSet):
             )
         offer.status = AreaOffer.OfferStatus.INACTIVE
         offer.save()
-        return Response(
-            {"message": "Offer deactivated successfully."},
-            status=status.HTTP_200_OK,
-        )
-    
+        return Response({"message": "Offer deactivated successfully."}, status=status.HTTP_200_OK)
+
     def get_queryset(self):
         queryset = super().get_queryset()
-        user_email = self.request.user_email  # From Firebase authentication
+        user_email = self.request.user_email
         if user_email:
-            queryset = queryset.filter(created_by__email=user_email)  # Limit to user's offers
+            queryset = queryset.filter(created_by__email=user_email)
         return queryset
-    
+
     def list(self, request, *args, **kwargs):
-        """
-        List offers for the logged-in user with proper messaging for empty results.
-        """
         queryset = self.filter_queryset(self.get_queryset())
-
-        # Check if the queryset is empty
         if not queryset.exists():
-            return Response(
-                {"message": "No offers found."},
-                status=status.HTTP_200_OK,
-            )
-
-        # Paginate if needed
+            return Response({"message": "No offers found."}, status=status.HTTP_200_OK)
         page = self.paginate_queryset(queryset)
         if page is not None:
             serializer = self.get_serializer(page, many=True)
             return self.get_paginated_response(serializer.data)
-
-        # Serialize and return data
         serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
-    
 
+    def _handle_uploaded_files(self, offer):
 
-
+        files = self.request.FILES.getlist('documents')
+        for file in files:
+            AreaOfferDocuments.objects.create(offer=offer, document=file)
 
 class AreaOfferDocumentsViewSet(viewsets.ModelViewSet):
     """

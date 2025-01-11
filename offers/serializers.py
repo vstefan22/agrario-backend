@@ -111,15 +111,26 @@ class ParcelSerializer(serializers.ModelSerializer):
         return polygon
 
 class AreaOfferDocumentsSerializer(serializers.ModelSerializer):
+    document_url = serializers.SerializerMethodField()
+
     class Meta:
         model = AreaOfferDocuments
-        fields = ["id", "offer", "uploaded_at"]
+        fields = ["id", "offer", "uploaded_at", "document_url"]
         read_only_fields = ["uploaded_at"]
+
+    def get_document_url(self, obj):
+        request = self.context.get('request')
+        if obj.document and hasattr(obj.document, 'url'):
+            return request.build_absolute_uri(obj.document.url)
+        return None
 
     
 class AreaOfferSerializer(serializers.ModelSerializer):
     status_display = serializers.CharField(source="get_status_display", read_only=True)
     utilization_display = serializers.CharField(source="get_utilization_display", read_only=True)
+    preferred_regionality_display = serializers.CharField(source="get_preferred_regionality_display", read_only=True)
+    shareholder_model_display = serializers.CharField(source="get_shareholder_model_display", read_only=True)
+
     documented_offers = AreaOfferDocumentsSerializer(many=True, read_only=True)
 
     class Meta:
@@ -127,37 +138,32 @@ class AreaOfferSerializer(serializers.ModelSerializer):
         fields = [
             "identifier",
             "offer_number",
-            "title",
-            "description",
             "status",
             "status_display",
             "hide_from_search",
-            "created_by",
             "available_from",
             "utilization",
             "utilization_display",
             "criteria",
-            'documented_offers'
+            "preferred_regionality",
+            "preferred_regionality_display",
+            "shareholder_model",
+            "shareholder_model_display",
+            "important_remarks",
+            "documented_offers"
         ]
+        extra_kwargs = {"created_by": {"read_only": True}}
 
-    def validate_offer_number(self, value):
-        if value <= 0:
-            raise serializers.ValidationError("Offer number must be a positive integer.")
-        return value
+    def create(self, validated_data):
+        request = self.context.get('request')
+        user = request.user if request else None
+        return AreaOffer.objects.create(created_by=user, **validated_data)
 
-    def get_status(self, obj):
-        return "Marketing Active" if obj.is_active else "Marketing in Preparation"
-
-    
-    def validate_criteria_text_fields(self, value):
+    def validate_criteria(self, value):
         if not isinstance(value, dict):
             raise serializers.ValidationError("Criteria must be a dictionary.")
         return value
 
-    def validate_dropdown_selections(self, value):
-        if not isinstance(value, dict):
-            raise serializers.ValidationError("Dropdown selections must be a dictionary.")
-        return value
 
 
 class AreaOfferConfirmationSerializer(serializers.ModelSerializer):
