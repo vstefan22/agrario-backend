@@ -161,7 +161,7 @@ cython_debug/
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
 
-firebase-credentials.json
-google-credentials.json
-firebase-credentials.json.base64
-google-credentials.json.base64
+/firebase-credentials.json
+/google-credentials.json
+/firebase-credentials.json.base64
+/google-credentials.json.base64

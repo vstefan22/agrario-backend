@@ -17,13 +17,25 @@ from reports.models import Report
 import logging
 from django.contrib.gis.geos import GEOSGeometry
 from django.contrib.gis.gdal import SpatialReference, CoordTransform
+from rest_framework_gis.serializers import GeoFeatureModelSerializer
 
 logging.basicConfig(
-    level=logging.DEBUG,  # Adjust level as needed (DEBUG, INFO, WARNING, ERROR, CRITICAL)
-    format='%(asctime)s - %(levelname)s - %(message)s',  # Format for log messages
+    # Adjust level as needed (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+    level=logging.DEBUG,
+    # Format for log messages
+    format='%(asctime)s - %(levelname)s - %(message)s',
 )
 
-logger=logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
+
+
+class ParcelGeoSerializer(GeoFeatureModelSerializer):
+    class Meta:
+        model = Parcel
+        fields = ('id', 'alkis_feature_id', 'state_name', 'district_name',
+                  'municipality_name', 'cadastral_area', 'cadastral_parcel', 'zipcode')
+        geo_field = 'polygon'
+
 
 class LanduseSerializer(serializers.ModelSerializer):
     """
@@ -80,19 +92,25 @@ class ParcelSerializer(serializers.ModelSerializer):
 
                 # Calculate area in square meters
                 area_square_meters = polygon.area
-                logger.info(f"Calculated Area (square meters): {area_square_meters}")
+                logger.info(f"Calculated Area (square meters): {
+                            area_square_meters}")
 
                 # Validate the area
                 if area_square_meters > 1e6 * 1000:  # 1,000 km²
-                    logger.error(f"Area is unrealistically large: {area_square_meters} m²")
-                    raise ValueError("The calculated area is too large and likely invalid.")
+                    logger.error(f"Area is unrealistically large: {
+                                 area_square_meters} m²")
+                    raise ValueError(
+                        "The calculated area is too large and likely invalid.")
                 elif area_square_meters < 1.0:  # Less than 1 m²
-                    logger.error(f"Area is unrealistically small: {area_square_meters} m²")
-                    raise ValueError("The calculated area is too small and likely invalid.")
+                    logger.error(f"Area is unrealistically small: {
+                                 area_square_meters} m²")
+                    raise ValueError(
+                        "The calculated area is too small and likely invalid.")
 
                 # Save the polygon and area
                 validated_data["polygon"] = polygon
-                validated_data["area_square_meters"] = round(area_square_meters, 2)
+                validated_data["area_square_meters"] = round(
+                    area_square_meters, 2)
             except Exception as e:
                 logger.error(f"Error processing polygon data: {e}")
                 validated_data["area_square_meters"] = 0  # Fallback to zero
@@ -101,14 +119,15 @@ class ParcelSerializer(serializers.ModelSerializer):
 
         return super().create(validated_data)
 
-    
     def validate_area(self, polygon):
         """
         Validate the calculated area to ensure it is within reasonable limits.
         """
         if polygon.area > 10_000_000:  # Example: 10 million m² or 10 km²
-            raise serializers.ValidationError("The area of the polygon is too large.")
+            raise serializers.ValidationError(
+                "The area of the polygon is too large.")
         return polygon
+
 
 class AreaOfferDocumentsSerializer(serializers.ModelSerializer):
     document_url = serializers.SerializerMethodField()
@@ -124,12 +143,16 @@ class AreaOfferDocumentsSerializer(serializers.ModelSerializer):
             return request.build_absolute_uri(obj.document.url)
         return None
 
-    
+
 class AreaOfferSerializer(serializers.ModelSerializer):
-    status_display = serializers.CharField(source="get_status_display", read_only=True)
-    utilization_display = serializers.CharField(source="get_utilization_display", read_only=True)
-    preferred_regionality_display = serializers.CharField(source="get_preferred_regionality_display", read_only=True)
-    shareholder_model_display = serializers.CharField(source="get_shareholder_model_display", read_only=True)
+    status_display = serializers.CharField(
+        source="get_status_display", read_only=True)
+    utilization_display = serializers.CharField(
+        source="get_utilization_display", read_only=True)
+    preferred_regionality_display = serializers.CharField(
+        source="get_preferred_regionality_display", read_only=True)
+    shareholder_model_display = serializers.CharField(
+        source="get_shareholder_model_display", read_only=True)
 
     documented_offers = AreaOfferDocumentsSerializer(many=True, read_only=True)
 
@@ -163,7 +186,6 @@ class AreaOfferSerializer(serializers.ModelSerializer):
         if not isinstance(value, dict):
             raise serializers.ValidationError("Criteria must be a dictionary.")
         return value
-
 
 
 class AreaOfferConfirmationSerializer(serializers.ModelSerializer):
@@ -202,10 +224,12 @@ class AuctionPlacementSerializer(serializers.ModelSerializer):
 
     def validate_additional_criteria(self, value):
         # Add custom validation for additional criteria
-        required_keys = ["availability_date", "participation_form"]  # Example required keys
+        required_keys = ["availability_date",
+                         "participation_form"]  # Example required keys
         for key in required_keys:
             if key not in value:
-                raise serializers.ValidationError(f"Missing required criteria: {key}")
+                raise serializers.ValidationError(
+                    f"Missing required criteria: {key}")
         return value
 
     def validate_price(self, value):
@@ -213,14 +237,17 @@ class AuctionPlacementSerializer(serializers.ModelSerializer):
         Ensure that the price is a positive value.
         """
         if value <= 0:
-            raise serializers.ValidationError({"error": "Price must be a positive value."})
+            raise serializers.ValidationError(
+                {"error": "Price must be a positive value."})
         return value
 
     def validate_parcel(self, value):
         request_user = self.context["request"].user
         if value.created_by != request_user:
-            logger.warning("Parcel validation failed: User %s does not own Parcel %s", request_user.id, value.id)
-            raise serializers.ValidationError("You can only create offers for parcels you own.")
+            logger.warning(
+                "Parcel validation failed: User %s does not own Parcel %s", request_user.id, value.id)
+            raise serializers.ValidationError(
+                "You can only create offers for parcels you own.")
         return value
 
     def validate_documents(self, value):
