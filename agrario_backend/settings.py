@@ -35,13 +35,25 @@ FRONTEND_URL = os.getenv('FRONTEND_URL')
 BACKEND_URL = os.getenv('BACKEND_URL')
 STRIPE_SECRET_KEY = os.getenv('STRIPE_SECRET_KEY')
 
-ALLOWED_HOSTS = ['127.0.0.1',
-                 'agrario-backend-cc0a3b9c6ae6.herokuapp.com',
-                 'localhost']
+ANALYSE_PLUS_RATE = 2
 
+ALLOWED_HOSTS = [
+    '127.0.0.1',
+    'localhost',
+    'agrario-backend-cc0a3b9c6ae6.herokuapp.com',
+    'agrario-frontend-woad.vercel.app'
+]
 
-CSRF_TRUSTED_ORIGINS = [FRONTEND_URL, BACKEND_URL]
-CORS_ALLOWED_ORIGINS = [FRONTEND_URL, BACKEND_URL]
+CSRF_TRUSTED_ORIGINS = [
+    FRONTEND_URL,
+    BACKEND_URL,
+    'https://agrario-frontend-woad.vercel.app'
+]
+CORS_ALLOWED_ORIGINS = [
+    FRONTEND_URL,
+    BACKEND_URL,
+    'https://agrario-frontend-woad.vercel.app'
+]
 CORS_ALLOW_CREDENTIALS = True
 
 CORS_ALLOW_HEADERS = [
@@ -168,24 +180,10 @@ if DEBUG:
             'PORT': os.getenv("DATABASE_PORT"),
         }
     }
-
-# Database
-# if not DEBUG:
-#     # POSTGRESQL
-#     DATABASES = {
-#         'default': {
-#             'ENGINE': 'django.contrib.gis.db.backends.postgis',
-#             'NAME': os.getenv("DATABASE_NAME"),
-#             'USER': os.getenv("DATABASE_USER"),
-#             'PASSWORD': os.getenv("DATABASE_PASSWORD"),
-#             'HOST': os.getenv("DATABASE_HOST"),
-#             'PORT': os.getenv("DATABASE_PORT"),
-#         }
-#     }
-# else:
-#     DATABASES = {
-#         'default': dj_database_url.config(engine='django.contrib.gis.db.backends.postgis')
-#     }
+else:
+    DATABASES = {
+        'default': dj_database_url.config(engine='django.contrib.gis.db.backends.postgis')
+    }
 AUTH_USER_MODEL = 'accounts.MarketUser'
 # Load Firebase credentials
 firebase_credentials_path = os.getenv("FIREBASE_CREDENTIALS_JSON_PATH")
@@ -234,9 +232,6 @@ except Exception as e:
     logging.error(f"Error loading Google Cloud credentials: {e}")
     raise
 
-G_CLOUD_PROJECT_ID = os.getenv("G_CLOUD_PROJECT_ID")
-G_CLOUD_BUCKET_NAME_MEDIA = os.getenv("G_CLOUD_BUCKET_NAME_MEDIA")
-G_CLOUD_BUCKET_NAME_STATIC = os.getenv("G_CLOUD_BUCKET_NAME_STATIC")
 STORAGES = {
     "default": {
         "BACKEND": "storages.backends.gcloud.GoogleCloudStorage",
