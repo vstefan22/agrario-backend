@@ -5,11 +5,15 @@ Provides endpoints for managing land use, parcels, area offers, and associated d
 
 from decimal import Decimal
 from django.contrib.gis.geos import GEOSGeometry
+from django.contrib.gis.db.models.functions import Transform
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
-from rest_framework.permissions import BasePermission, IsAuthenticated
+from rest_framework.permissions import BasePermission, IsAuthenticated, AllowAny
 from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser
+from rest_framework.views import APIView
+from rest_framework_gis.pagination import GeoJsonPagination
+
 from accounts.models import MarketUser
 from payments.models import PaymentTransaction
 from reports.models import Report
@@ -26,24 +30,55 @@ from .serializers import (
     AuctionPlacementSerializer,
     LanduseSerializer,
     ParcelSerializer,
+    ParcelGeoSerializer
 )
 from accounts.firebase_auth import verify_firebase_token
+
+from django.contrib.gis.db.models.functions import Transform
+from rest_framework.mixins import ListModelMixin
+
+from rest_framework.viewsets import GenericViewSet
+from rest_framework import viewsets, mixins
+
+
+# for p in Parcel.objects.all():
+#     geom = p.polygon
+#     geom.srid = 25832
+#     geom.transform(4326)
+#     p.polygon = geom
+#     p.save()
+
+
+class ParcelGeoViewSet(viewsets.ModelViewSet):
+    serializer_class = ParcelGeoSerializer
+
+    def get_queryset(self):
+        return Parcel.objects.annotate(
+            # working if SRID is correct
+            polygon_4326=Transform('polygon', 4326)
+        )
+
+
+# Parcel.objects.all().delete()
 
 
 class FirebaseIsAuthenticated(BasePermission):
     """
     Custom permission class for Firebase authentication.
     """
+
     def has_permission(self, request, view):
         auth_header = request.headers.get("Authorization")
         if not auth_header or not auth_header.startswith("Bearer "):
-            request.error_message = {"error": "Authentication header or Bearer token is missing."}
+            request.error_message = {
+                "error": "Authentication header or Bearer token is missing."}
             return False
 
         token = auth_header.split("Bearer ")[1]
         decoded_token = verify_firebase_token(token)
         if not decoded_token:
-            request.error_message = {"error": "Invalid or expired Firebase token."}
+            request.error_message = {
+                "error": "Invalid or expired Firebase token."}
             return False
 
         request.user_email = decoded_token.get("email")
@@ -144,7 +179,8 @@ class ParcelViewSet(viewsets.ModelViewSet):
             "calculated_value": parcel.area_square_meters * 2,  # Example calculation
         }
 
-        report = Report.objects.create(parcel=parcel, calculation_result=result)
+        report = Report.objects.create(
+            parcel=parcel, calculation_result=result)
         return Response(
             {
                 "message": "Calculation completed and saved successfully.",
@@ -187,7 +223,6 @@ class ParcelViewSet(viewsets.ModelViewSet):
             },
             status=status.HTTP_200_OK,
         )
-
 
     @action(detail=True, methods=["post"], permission_classes=[FirebaseIsAuthenticated])
     def buy(self, request, pk=None):
@@ -256,7 +291,7 @@ class ParcelViewSet(viewsets.ModelViewSet):
                 {"error": "The specified parcel does not exist."},
                 status=status.HTTP_404_NOT_FOUND,
             )
-        
+
     @action(detail=True, methods=["post"], permission_classes=[FirebaseIsAuthenticated])
     def add_to_basket(self, request, pk=None):
         """
@@ -265,7 +300,7 @@ class ParcelViewSet(viewsets.ModelViewSet):
         try:
             # Ensure the parcel exists
             parcel = self.get_object()
-            
+
             # Ensure the user is authenticated and retrieve their email
             user_email = getattr(request, "user_email", None)
             if not user_email:
@@ -293,7 +328,7 @@ class ParcelViewSet(viewsets.ModelViewSet):
         except Exception as e:
             # Generic error handling for unexpected exceptions
             return Response({"error": f"An unexpected error occurred: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-        
+
     @action(detail=True, methods=["post"], permission_classes=[FirebaseIsAuthenticated])
     def remove_from_basket(self, request, pk=None):
         """
@@ -312,7 +347,7 @@ class ParcelViewSet(viewsets.ModelViewSet):
             return Response({"error": "Invalid parcel ID."}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-        
+
     @action(detail=False, methods=["get"], permission_classes=[FirebaseIsAuthenticated])
     def basket_summary(self, request):
         """
@@ -324,7 +359,8 @@ class ParcelViewSet(viewsets.ModelViewSet):
 
         parcels = Parcel.objects.filter(id__in=self.basket[user_email])
         total_area = sum(parcel.area_square_meters for parcel in parcels)
-        total_cost = sum(Decimal(parcel.area_square_meters) * Decimal(10) for parcel in parcels)  # Ensure total_cost is Decimal
+        total_cost = sum(Decimal(parcel.area_square_meters) * Decimal(10)
+                         for parcel in parcels)  # Ensure total_cost is Decimal
         tax = total_cost * Decimal("0.2")  # Use Decimal for tax rate
         summary = {
             "total_parcels": len(parcels),
@@ -345,7 +381,8 @@ class ParcelViewSet(viewsets.ModelViewSet):
             return Response({"error": "Discount code is required."}, status=status.HTTP_400_BAD_REQUEST)
 
         # Example discount validation logic
-        valid_codes = {"SAVE10": Decimal("0.1"), "SAVE20": Decimal("0.2")}  # Use Decimal for discounts
+        # Use Decimal for discounts
+        valid_codes = {"SAVE10": Decimal("0.1"), "SAVE20": Decimal("0.2")}
         discount = valid_codes.get(discount_code.upper())
         if not discount:
             return Response({"error": "Invalid discount code."}, status=status.HTTP_400_BAD_REQUEST)
@@ -355,7 +392,8 @@ class ParcelViewSet(viewsets.ModelViewSet):
             return Response({"error": "Basket is empty."}, status=status.HTTP_400_BAD_REQUEST)
 
         parcels = Parcel.objects.filter(id__in=self.basket[user_email])
-        total_cost = sum(Decimal(parcel.area_square_meters) * Decimal(10) for parcel in parcels)  # Ensure total_cost is Decimal
+        total_cost = sum(Decimal(parcel.area_square_meters) * Decimal(10)
+                         for parcel in parcels)  # Ensure total_cost is Decimal
         tax = total_cost * Decimal("0.2")  # Use Decimal for tax rate
         final_total = total_cost + tax
         discounted_total = final_total * (1 - discount)
@@ -368,7 +406,7 @@ class ParcelViewSet(viewsets.ModelViewSet):
             },
             status=status.HTTP_200_OK,
         )
-    
+
     @action(detail=True, methods=["post"], permission_classes=[FirebaseIsAuthenticated])
     def analyze_polygon(self, request, pk=None):
         """
@@ -393,8 +431,7 @@ class ParcelViewSet(viewsets.ModelViewSet):
             )
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-        
-    
+
     @action(detail=False, methods=["get"], permission_classes=[FirebaseIsAuthenticated])
     def my_parcels(self, request):
         """
@@ -404,7 +441,7 @@ class ParcelViewSet(viewsets.ModelViewSet):
         parcels = Parcel.objects.filter(created_by__email=user_email)
         serializer = self.get_serializer(parcels, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
-    
+
     @action(detail=True, methods=["get"], permission_classes=[FirebaseIsAuthenticated])
     def detailed_view(self, request, pk=None):
         """
@@ -417,7 +454,8 @@ class ParcelViewSet(viewsets.ModelViewSet):
             user = MarketUser.objects.get(email=user_email)
 
             # Check if the user has purchased the "Analyse Plus" report
-            report_purchased = Report.objects.filter(parcel=parcel, visible_for="USER", purchase_type="analyse_plus").exists()
+            report_purchased = Report.objects.filter(
+                parcel=parcel, visible_for="USER", purchase_type="analyse_plus").exists()
 
             # Prepare the response data
             data = {
@@ -473,11 +511,11 @@ class ParcelViewSet(viewsets.ModelViewSet):
         return queryset
 
 
-
 class ParcelOwnershipPermission(IsAuthenticated):
     """
     Custom permission to ensure users can only operate on their own parcels.
     """
+
     def has_object_permission(self, request, view, obj):
         # Ensure the object is a Parcel and check ownership
         return isinstance(obj, Parcel) and obj.created_by == request.user
@@ -517,12 +555,13 @@ class AreaOfferViewSet(viewsets.ModelViewSet):
                 {"error": "You are not allowed to update this offer."},
                 status=status.HTTP_403_FORBIDDEN,
             )
-        serializer = self.get_serializer(offer, data=request.data, partial=True)
+        serializer = self.get_serializer(
+            offer, data=request.data, partial=True)
         if serializer.is_valid():
             serializer.save()
             return Response(serializer.data, status=status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    
+
     @action(detail=True, methods=["post"], parser_classes=[MultiPartParser])
     def upload_document(self, request, pk=None):
         """
@@ -541,7 +580,7 @@ class AreaOfferViewSet(viewsets.ModelViewSet):
         AreaOfferDocuments.objects.create(offer=offer, document=document_file)
 
         return Response({"message": "Document uploaded successfully."}, status=status.HTTP_201_CREATED)
-    
+
     @action(detail=True, methods=["post"], permission_classes=[IsAuthenticated])
     def prepare_offer(self, request, pk=None):
         """
@@ -572,14 +611,15 @@ class AreaOfferViewSet(viewsets.ModelViewSet):
             {"message": "Offer deactivated successfully."},
             status=status.HTTP_200_OK,
         )
-    
+
     def get_queryset(self):
         queryset = super().get_queryset()
         user_email = self.request.user_email  # From Firebase authentication
         if user_email:
-            queryset = queryset.filter(created_by__email=user_email)  # Limit to user's offers
+            # Limit to user's offers
+            queryset = queryset.filter(created_by__email=user_email)
         return queryset
-    
+
     def list(self, request, *args, **kwargs):
         """
         List offers for the logged-in user with proper messaging for empty results.
@@ -602,9 +642,6 @@ class AreaOfferViewSet(viewsets.ModelViewSet):
         # Serialize and return data
         serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
-    
-
-
 
 
 class AreaOfferDocumentsViewSet(viewsets.ModelViewSet):

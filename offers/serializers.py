@@ -16,8 +16,17 @@ from .models import (
 from reports.models import Report
 import logging
 from django.contrib.gis.geos import GEOSGeometry
+from rest_framework_gis.serializers import GeoFeatureModelSerializer
 
 logger = logging.getLogger(__name__)
+
+
+class ParcelGeoSerializer(GeoFeatureModelSerializer):
+    class Meta:
+        model = Parcel
+        fields = ('id', 'alkis_feature_id', 'state_name', 'district_name',
+                  'municipality_name', 'cadastral_area', 'cadastral_parcel', 'zipcode')
+        geo_field = 'polygon'
 
 
 class LanduseSerializer(serializers.ModelSerializer):
@@ -64,10 +73,13 @@ class ParcelSerializer(serializers.ModelSerializer):
                 "type": polygon_data.get("type"),
                 "coordinates": polygon_data.get("coordinates")
             }
-            validated_data["polygon"] = GEOSGeometry(str(polygon_geojson))  # Convert GeoJSON to GEOSGeometry
-            validated_data["area_square_meters"] = validated_data["polygon"].area  # Dynamically calculate area
+            validated_data["polygon"] = GEOSGeometry(
+                str(polygon_geojson))  # Convert GeoJSON to GEOSGeometry
+            # Dynamically calculate area
+            validated_data["area_square_meters"] = validated_data["polygon"].area
 
         return super().create(validated_data)
+
 
 class AreaOfferDocumentsSerializer(serializers.ModelSerializer):
     class Meta:
@@ -75,10 +87,12 @@ class AreaOfferDocumentsSerializer(serializers.ModelSerializer):
         fields = ["id", "offer", "uploaded_at"]
         read_only_fields = ["uploaded_at"]
 
-    
+
 class AreaOfferSerializer(serializers.ModelSerializer):
-    status_display = serializers.CharField(source="get_status_display", read_only=True)
-    utilization_display = serializers.CharField(source="get_utilization_display", read_only=True)
+    status_display = serializers.CharField(
+        source="get_status_display", read_only=True)
+    utilization_display = serializers.CharField(
+        source="get_utilization_display", read_only=True)
     documented_offers = AreaOfferDocumentsSerializer(many=True, read_only=True)
 
     class Meta:
@@ -101,13 +115,13 @@ class AreaOfferSerializer(serializers.ModelSerializer):
 
     def validate_offer_number(self, value):
         if value <= 0:
-            raise serializers.ValidationError("Offer number must be a positive integer.")
+            raise serializers.ValidationError(
+                "Offer number must be a positive integer.")
         return value
 
     def get_status(self, obj):
         return "Marketing Active" if obj.is_active else "Marketing in Preparation"
 
-    
     def validate_criteria_text_fields(self, value):
         if not isinstance(value, dict):
             raise serializers.ValidationError("Criteria must be a dictionary.")
@@ -115,7 +129,8 @@ class AreaOfferSerializer(serializers.ModelSerializer):
 
     def validate_dropdown_selections(self, value):
         if not isinstance(value, dict):
-            raise serializers.ValidationError("Dropdown selections must be a dictionary.")
+            raise serializers.ValidationError(
+                "Dropdown selections must be a dictionary.")
         return value
 
 
@@ -155,10 +170,12 @@ class AuctionPlacementSerializer(serializers.ModelSerializer):
 
     def validate_additional_criteria(self, value):
         # Add custom validation for additional criteria
-        required_keys = ["availability_date", "participation_form"]  # Example required keys
+        required_keys = ["availability_date",
+                         "participation_form"]  # Example required keys
         for key in required_keys:
             if key not in value:
-                raise serializers.ValidationError(f"Missing required criteria: {key}")
+                raise serializers.ValidationError(
+                    f"Missing required criteria: {key}")
         return value
 
     def validate_price(self, value):
@@ -166,14 +183,17 @@ class AuctionPlacementSerializer(serializers.ModelSerializer):
         Ensure that the price is a positive value.
         """
         if value <= 0:
-            raise serializers.ValidationError({"error": "Price must be a positive value."})
+            raise serializers.ValidationError(
+                {"error": "Price must be a positive value."})
         return value
 
     def validate_parcel(self, value):
         request_user = self.context["request"].user
         if value.created_by != request_user:
-            logger.warning("Parcel validation failed: User %s does not own Parcel %s", request_user.id, value.id)
-            raise serializers.ValidationError("You can only create offers for parcels you own.")
+            logger.warning(
+                "Parcel validation failed: User %s does not own Parcel %s", request_user.id, value.id)
+            raise serializers.ValidationError(
+                "You can only create offers for parcels you own.")
         return value
 
     def validate_documents(self, value):

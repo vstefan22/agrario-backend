@@ -36,8 +36,8 @@ BACKEND_URL = os.getenv('BACKEND_URL')
 STRIPE_SECRET_KEY = os.getenv('STRIPE_SECRET_KEY')
 
 ALLOWED_HOSTS = ['127.0.0.1',
-                'agrario-backend-cc0a3b9c6ae6.herokuapp.com',
-                'localhost']
+                 'agrario-backend-cc0a3b9c6ae6.herokuapp.com',
+                 'localhost']
 
 
 CSRF_TRUSTED_ORIGINS = [FRONTEND_URL, BACKEND_URL]
@@ -96,6 +96,7 @@ INSTALLED_APPS = [
     'rest_framework.authtoken',
     'drf_yasg',
     'django_filters',
+    "rest_framework_gis",
 
     # custom apps
     'accounts',
@@ -104,7 +105,7 @@ INSTALLED_APPS = [
     'subscriptions',
     'reports',
     'messaging',
-    'invites', 
+    'invites',
 ]
 
 MIDDLEWARE = [
@@ -124,7 +125,7 @@ REST_FRAMEWORK = {
         'rest_framework.authentication.TokenAuthentication',
     ],
     'DEFAULT_PERMISSION_CLASSES': [
-        'rest_framework.permissions.IsAuthenticated',
+        # 'rest_framework.permissions.IsAuthenticated',
     ],
     'EXCEPTION_HANDLER': 'rest_framework.views.exception_handler',
 }
@@ -152,8 +153,6 @@ WSGI_APPLICATION = "agrario_backend.wsgi.application"
 
 # Database
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
-
-
 
 
 # Database
@@ -198,7 +197,8 @@ if firebase_credentials_path and os.path.exists(firebase_credentials_path):
     with open(firebase_credentials_path, "r") as f:
         firebase_config = json.load(f)
 elif firebase_credentials_base64:
-    firebase_config = json.loads(base64.b64decode(firebase_credentials_base64).decode("utf-8"))
+    firebase_config = json.loads(base64.b64decode(
+        firebase_credentials_base64).decode("utf-8"))
 else:
     firebase_config = None  # Default to None to handle missing credentials
 
@@ -256,8 +256,8 @@ STORAGES = {
     },
 }
 
-GDAL_LIBRARY_PATH = r"C:\Users\gacic\anaconda3\envs\agrario_env\Library\bin\gdal.dll"
-GEOS_LIBRARY_PATH  = r"C:\Users\gacic\anaconda3\envs\agrario_env\Library\bin\geos_c.dll"
+# GDAL_LIBRARY_PATH = r"C:\Users\gacic\anaconda3\envs\agrario_env\Library\bin\gdal.dll"
+# GEOS_LIBRARY_PATH  = r"C:\Users\gacic\anaconda3\envs\agrario_env\Library\bin\geos_c.dll"
 
 # Static files configuration
 STATIC_URL = "static/"
