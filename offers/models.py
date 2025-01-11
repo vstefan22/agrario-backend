@@ -79,6 +79,19 @@ class Parcel(models.Model):
 
     def __str__(self):
         return f"Parcel in {self.state_name}, {self.district_name}"
+    
+
+
+class BasketItem(models.Model):
+    """
+    Represents a parcel in the user's basket.
+    """
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="basket_items")
+    parcel = models.ForeignKey(Parcel, on_delete=models.CASCADE)
+    added_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ("user", "parcel")
 
 
 class AreaOffer(models.Model):

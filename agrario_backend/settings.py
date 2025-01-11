@@ -35,6 +35,10 @@ FRONTEND_URL = os.getenv('FRONTEND_URL')
 BACKEND_URL = os.getenv('BACKEND_URL')
 STRIPE_SECRET_KEY = os.getenv('STRIPE_SECRET_KEY')
 
+ANALYSE_PLUS_RATE = 2
+
+ANALYSE_PLUS_RATE = 2
+
 ALLOWED_HOSTS = [
     '127.0.0.1',
     'localhost',
