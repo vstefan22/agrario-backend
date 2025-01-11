@@ -4,6 +4,9 @@ Defines serializers for Landuse, Parcel, AreaOffer, and related models.
 """
 
 from rest_framework import serializers
+from django.contrib.gis.geos import Polygon, MultiPolygon
+from django.core.exceptions import ValidationError
+from django.contrib.gis.geos.error import GEOSException
 
 from .models import (
     AreaOffer,
@@ -33,7 +36,7 @@ class ParcelGeoSerializer(GeoFeatureModelSerializer):
     class Meta:
         model = Parcel
         fields = ('id', 'alkis_feature_id', 'state_name', 'district_name',
-                  'municipality_name', 'cadastral_area', 'cadastral_parcel', 'zipcode')
+                  'municipality_name', 'cadastral_area', 'area_square_meters', 'cadastral_parcel', 'zipcode', 'communal_district')
         geo_field = 'polygon'
 
 
@@ -71,46 +74,38 @@ class ParcelSerializer(serializers.ModelSerializer):
         read_only_fields = ["created_by", "area_square_meters"]
 
     def create(self, validated_data):
+        # Extract polygon data from validated data
         polygon_data = validated_data.pop("polygon", None)
         if polygon_data:
             try:
-                # Log the raw polygon data
                 logger.info(f"Raw Polygon Data: {polygon_data}")
 
-                # Convert to GeoJSON and log it
-                polygon_geojson = {
-                    "type": polygon_data.get("type"),
-                    "coordinates": polygon_data.get("coordinates"),
-                }
-                logger.info(f"Polygon GeoJSON: {polygon_geojson}")
+                # Validate polygon_data format
+                if not isinstance(polygon_data, list) or len(polygon_data) < 3:
+                    raise ValidationError(
+                        "Polygon must have at least 3 points.")
 
-                # Convert GeoJSON to GEOSGeometry (assume input is EPSG:4326)
-                polygon = GEOSGeometry(str(polygon_geojson), srid=4326)
+                # Convert latitude/longitude pairs to GEOS Polygon
+                coords = [(point["lng"], point["lat"])
+                          for point in polygon_data]
 
-                # Transform to an equal-area CRS (e.g., EPSG:3857) for area calculation
-                polygon.transform(3857)
+                # Create a GEOS Polygon
+                polygon = Polygon(coords, srid=4326)  # EPSG:4326 is WGS84
+                multipolygon = MultiPolygon(polygon, srid=4326)
+                logger.info(f"Created Polygon: {polygon}")
 
-                # Calculate area in square meters
-                area_square_meters = polygon.area
-                logger.info(f"Calculated Area (square meters): {area_square_meters}")
+                # Optionally, transform to a different SRID (e.g., 3857) for area calculation
+                # Transform to Web Mercator for accurate area calculation
+                multipolygon.transform(3857)
 
-                # Validate the area
-                if area_square_meters > 1e6 * 1000:  # 1,000 km²
-                    logger.error(f"Area is unrealistically large: {area_square_meters} m²")
-                    raise ValueError(
-                        "The calculated area is too large and likely invalid.")
-                elif area_square_meters < 1.0:  # Less than 1 m²
-                    logger.error(f"Area is unrealistically small: {area_square_meters} m²")
-                    raise ValueError(
-                        "The calculated area is too small and likely invalid.")
+                # Store the polygon and calculate the area in square meters
+                validated_data["polygon"] = multipolygon
 
-                # Save the polygon and area
-                validated_data["polygon"] = polygon
-                validated_data["area_square_meters"] = round(
-                    area_square_meters, 2)
-            except Exception as e:
+                logger.info(f"Polygon Area: {polygon.area} square meters")
+            except (GEOSException, ValidationError, KeyError, TypeError) as e:
                 logger.error(f"Error processing polygon data: {e}")
-                validated_data["area_square_meters"] = 0  # Fallback to zero
+                raise serializers.ValidationError(
+                    "Invalid polygon data provided.")
         else:
             logger.warning("No polygon data provided.")
 

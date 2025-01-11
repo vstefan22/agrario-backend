@@ -66,7 +66,8 @@ class Parcel(models.Model):
     cadastral_parcel = models.CharField(max_length=255)
 
     plot_number_main = models.CharField(max_length=8, null=True)
-    plot_number_secondary = models.CharField(max_length=8)
+    plot_number_secondary = models.CharField(
+        max_length=8, null=True, blank=True)
     land_use = models.CharField(null=True, blank=True, max_length=255)
     area_square_meters = models.DecimalField(max_digits=12, decimal_places=2)
 
