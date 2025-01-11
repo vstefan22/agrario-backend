@@ -92,18 +92,15 @@ class ParcelSerializer(serializers.ModelSerializer):
 
                 # Calculate area in square meters
                 area_square_meters = polygon.area
-                logger.info(f"Calculated Area (square meters): {
-                            area_square_meters}")
+                logger.info(f"Calculated Area (square meters): {area_square_meters}")
 
                 # Validate the area
                 if area_square_meters > 1e6 * 1000:  # 1,000 km²
-                    logger.error(f"Area is unrealistically large: {
-                                 area_square_meters} m²")
+                    logger.error(f"Area is unrealistically large: {area_square_meters} m²")
                     raise ValueError(
                         "The calculated area is too large and likely invalid.")
                 elif area_square_meters < 1.0:  # Less than 1 m²
-                    logger.error(f"Area is unrealistically small: {
-                                 area_square_meters} m²")
+                    logger.error(f"Area is unrealistically small: {area_square_meters} m²")
                     raise ValueError(
                         "The calculated area is too small and likely invalid.")
 

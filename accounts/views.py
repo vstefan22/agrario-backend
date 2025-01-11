@@ -91,12 +91,10 @@ class MarketUserViewSet(viewsets.ModelViewSet):
         """
         token = default_token_generator.make_token(user)
         uid = urlsafe_base64_encode(force_bytes(user.pk))
-        confirmation_link = f"{
-            settings.BACKEND_URL}/api/accounts/users/confirm-email/{uid}/{token}/"
+        confirmation_link = f"{settings.BACKEND_URL}/api/accounts/users/confirm-email/{uid}/{token}/"
         send_mail(
             subject="Confirm Your Email Address",
-            message=f"Hi {user.firstname},\n\nClick the link below to confirm your email:\n{
-                confirmation_link}",
+            message=f"Hi {user.firstname},\n\nClick the link below to confirm your email:\n{confirmation_link}",
             from_email=settings.EMAIL_HOST_USER,
             recipient_list=[user.email],
         )
@@ -326,8 +324,7 @@ class LoginView(APIView):
             AuthenticationFailed: If the email or password is incorrect.
         """
         firebase_api_key = settings.FIREBASE_API_KEY
-        url = f"https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key={
-            firebase_api_key}"
+        url = f"https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key={firebase_api_key}"
         payload = {
             "email": email,
             "password": password,
@@ -372,8 +369,7 @@ class RoleDashboardView(APIView):
 
             # Log if no files were found
             if not tutorial_links:
-                logger.warning(f"No tutorial videos found for role: {
-                               role} in bucket with prefix: {prefix}")
+                logger.warning(f"No tutorial videos found for role: {role} in bucket with prefix: {prefix}")
 
             return tutorial_links
         except Exception as e:
@@ -503,8 +499,7 @@ class RoleDashboardView(APIView):
         else:
             role_data = {}
 
-        dashboard_greeting = f"Welcome {
-            role.capitalize()} {user.firstname or email.split('@')[0]}!"
+        dashboard_greeting = f"Welcome {role.capitalize()} {user.firstname or email.split('@')[0]}!"
         dashboard_data = {
             "dashboard_greeting": dashboard_greeting,
             "tutorial_links": tutorial_links,
@@ -722,8 +717,7 @@ class FirebasePasswordResetRequestView(APIView):
             # Send the reset link to the user's email
             send_mail(
                 subject="Password Reset Request",
-                message=f"Click the link below to reset your password:\n{
-                    reset_link}",
+                message=f"Click the link below to reset your password:\n{reset_link}",
                 from_email=settings.EMAIL_HOST_USER,
                 recipient_list=[email],
                 fail_silently=False,
