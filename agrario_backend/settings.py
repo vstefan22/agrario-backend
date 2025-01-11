@@ -169,7 +169,7 @@ WSGI_APPLICATION = "agrario_backend.wsgi.application"
 
 
 # Database
-if DEBUG:
+if not DEBUG:
     # POSTGRESQL
     DATABASES = {
         'default': {
@@ -251,8 +251,8 @@ STORAGES = {
     },
 }
 
-GDAL_LIBRARY_PATH = r"C:\Users\gacic\anaconda3\envs\agrario_env\Library\bin\gdal.dll"
-GEOS_LIBRARY_PATH  = r"C:\Users\gacic\anaconda3\envs\agrario_env\Library\bin\geos_c.dll"
+# GDAL_LIBRARY_PATH = r"C:\Users\gacic\anaconda3\envs\agrario_env\Library\bin\gdal.dll"
+# GEOS_LIBRARY_PATH  = r"C:\Users\gacic\anaconda3\envs\agrario_env\Library\bin\geos_c.dll"
 
 # Static files configuration
 STATIC_URL = "static/"
