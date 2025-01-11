@@ -35,6 +35,8 @@ FRONTEND_URL = os.getenv('FRONTEND_URL')
 BACKEND_URL = os.getenv('BACKEND_URL')
 STRIPE_SECRET_KEY = os.getenv('STRIPE_SECRET_KEY')
 
+ANALYSE_PLUS_RATE = 2
+
 ALLOWED_HOSTS = ['127.0.0.1',
                 'agrario-backend-cc0a3b9c6ae6.herokuapp.com',
                 'localhost']
@@ -256,8 +258,8 @@ STORAGES = {
     },
 }
 
-GDAL_LIBRARY_PATH = r"C:\Users\gacic\anaconda3\envs\agrario_env\Library\bin\gdal.dll"
-GEOS_LIBRARY_PATH  = r"C:\Users\gacic\anaconda3\envs\agrario_env\Library\bin\geos_c.dll"
+GDAL_LIBRARY_PATH = r"C:\Users\merlin\anaconda3\envs\agrario_env\Library\bin\gdal.dll"
+GEOS_LIBRARY_PATH  = r"C:\Users\merlin\anaconda3\envs\agrario_env\Library\bin\geos_c.dll"
 
 # Static files configuration
 STATIC_URL = "static/"

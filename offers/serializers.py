@@ -16,9 +16,14 @@ from .models import (
 from reports.models import Report
 import logging
 from django.contrib.gis.geos import GEOSGeometry
+from django.contrib.gis.gdal import SpatialReference, CoordTransform
 
-logger = logging.getLogger(__name__)
+logging.basicConfig(
+    level=logging.DEBUG,  # Adjust level as needed (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+    format='%(asctime)s - %(levelname)s - %(message)s',  # Format for log messages
+)
 
+logger=logging.getLogger(__name__)
 
 class LanduseSerializer(serializers.ModelSerializer):
     """
@@ -49,25 +54,61 @@ class ParcelSerializer(serializers.ModelSerializer):
             "land_use",
             "area_square_meters",
             "created_by",
-            "polygon",  # Correct field name
+            "polygon",
         ]
         read_only_fields = ["created_by", "area_square_meters"]
 
     def create(self, validated_data):
-        """
-        Override create method to handle polygon conversion and area calculation.
-        """
         polygon_data = validated_data.pop("polygon", None)
         if polygon_data:
-            # Ensure polygon data is in GeoJSON format
-            polygon_geojson = {
-                "type": polygon_data.get("type"),
-                "coordinates": polygon_data.get("coordinates")
-            }
-            validated_data["polygon"] = GEOSGeometry(str(polygon_geojson))  # Convert GeoJSON to GEOSGeometry
-            validated_data["area_square_meters"] = validated_data["polygon"].area  # Dynamically calculate area
+            try:
+                # Log the raw polygon data
+                logger.info(f"Raw Polygon Data: {polygon_data}")
+
+                # Convert to GeoJSON and log it
+                polygon_geojson = {
+                    "type": polygon_data.get("type"),
+                    "coordinates": polygon_data.get("coordinates"),
+                }
+                logger.info(f"Polygon GeoJSON: {polygon_geojson}")
+
+                # Convert GeoJSON to GEOSGeometry (assume input is EPSG:4326)
+                polygon = GEOSGeometry(str(polygon_geojson), srid=4326)
+
+                # Transform to an equal-area CRS (e.g., EPSG:3857) for area calculation
+                polygon.transform(3857)
+
+                # Calculate area in square meters
+                area_square_meters = polygon.area
+                logger.info(f"Calculated Area (square meters): {area_square_meters}")
+
+                # Validate the area
+                if area_square_meters > 1e6 * 1000:  # 1,000 km²
+                    logger.error(f"Area is unrealistically large: {area_square_meters} m²")
+                    raise ValueError("The calculated area is too large and likely invalid.")
+                elif area_square_meters < 1.0:  # Less than 1 m²
+                    logger.error(f"Area is unrealistically small: {area_square_meters} m²")
+                    raise ValueError("The calculated area is too small and likely invalid.")
+
+                # Save the polygon and area
+                validated_data["polygon"] = polygon
+                validated_data["area_square_meters"] = round(area_square_meters, 2)
+            except Exception as e:
+                logger.error(f"Error processing polygon data: {e}")
+                validated_data["area_square_meters"] = 0  # Fallback to zero
+        else:
+            logger.warning("No polygon data provided.")
 
         return super().create(validated_data)
+
+    
+    def validate_area(self, polygon):
+        """
+        Validate the calculated area to ensure it is within reasonable limits.
+        """
+        if polygon.area > 10_000_000:  # Example: 10 million m² or 10 km²
+            raise serializers.ValidationError("The area of the polygon is too large.")
+        return polygon
 
 class AreaOfferDocumentsSerializer(serializers.ModelSerializer):
     class Meta:

@@ -36,45 +36,70 @@ class CreateStripePaymentView(APIView):
 
     def post(self, request):
         """
-        Create a Stripe payment session for Analyse Plus and update parcel status.
+        Create a Stripe payment session for Analyse Plus.
         """
         user = request.user
-        parcel_id = request.data.get("parcel_id")
-        amount = request.data.get("amount", 100)  # Default: $100 for testing
-        currency = request.data.get("currency", "usd")
+        parcel_ids = request.data.get("parcel_ids", [])  # List of parcel IDs
+        payment_method = request.data.get("payment_method", "card")  # Default to credit card
+        currency = request.data.get("currency", "usd")  # Default to USD
 
-        if not parcel_id:
-            return Response({"error": "Parcel ID is required."}, status=400)
+        if not parcel_ids:
+            return Response({"error": "Parcel IDs are required."}, status=400)
+
+        # Fetch parcels
+        parcels = Parcel.objects.filter(id__in=parcel_ids, created_by=user)
+        if not parcels.exists():
+            return Response({"error": "No valid parcels found."}, status=400)
+
+        # Calculate total amount
+        analyse_plus_rate = getattr(settings, "ANALYSE_PLUS_RATE", 10)  # Default to 10 if not set
+        total_amount = sum(parcel.area_square_meters * analyse_plus_rate for parcel in parcels)
+
+        print("Total amount:", total_amount)
+        print("Analyse Plus rate:", analyse_plus_rate)
+        print("Parcels:", parcels)
+        print("pracel in parcels")
+        for parcel in parcels:
+            print(parcel.area_square_meters, parcel.area_square_meters * analyse_plus_rate)
+
+        # Check Stripe's minimum charge amount for the currency
+        minimum_amount = 50  # Example: Stripe's minimum charge for USD is 50 cents
+        if currency.lower() == "usd":
+            minimum_amount = 50
+        elif currency.lower() == "eur":
+            minimum_amount = 50
+
+        if total_amount * 100 < minimum_amount:  # Stripe expects amounts in cents
+            return Response(
+                {
+                    "error": f"The total amount must be at least {minimum_amount / 100:.2f} {currency.upper()}."
+                },
+                status=400,
+            )
 
         try:
             # Create a Stripe Payment Intent
             intent = stripe.PaymentIntent.create(
-                amount = parcel.area_square_meters * settings.ANALYSE_PLUS_RATE,
+                amount=int(total_amount * 100),  # Stripe expects amounts in cents
                 currency=currency,
-                metadata={"user_id": user.id, "parcel_id": parcel_id},  # Include parcel info
+                payment_method_types=["card", "sofort", "paypal"],  # Support multiple payment methods
+                metadata={"user_id": user.id, "parcel_ids": ",".join(map(str, parcel_ids))},
             )
 
             # Record the transaction
             transaction = PaymentTransaction.objects.create(
                 user=user,
-                amount=amount,
+                amount=total_amount,
                 currency=currency,
                 stripe_payment_intent=intent["id"],
-                status="success",  # Set as success since this is test-only
+                payment_method=payment_method,
+                status="pending",
             )
-
-            # Update parcel status
-            try:
-                parcel = Parcel.objects.get(id=parcel_id)
-                parcel.status = "purchased"  # Update the status
-                parcel.save()  # Save the changes
-            except Parcel.DoesNotExist:
-                return Response({"error": "Parcel does not exist."}, status=404)
 
             return Response({
                 "client_secret": intent["client_secret"],
                 "transaction_id": transaction.identifier,
-                "message": f"Parcel {parcel_id} marked as purchased.",
+                "message": "Payment intent created successfully.",
             }, status=200)
         except Exception as e:
             return Response({"error": str(e)}, status=500)
@@ -94,37 +119,30 @@ class StripeWebhookView(APIView):
 
         try:
             event = stripe.Webhook.construct_event(payload, sig_header, endpoint_secret)
-        except ValueError:
-            return Response({"error": "Invalid payload."}, status=400)
-        except stripe.error.SignatureVerificationError:
-            return Response({"error": "Invalid signature."}, status=400)
+        except (ValueError, stripe.error.SignatureVerificationError):
+            return Response({"error": "Invalid payload or signature."}, status=400)
 
         if event["type"] == "payment_intent.succeeded":
             intent = event["data"]["object"]
             transaction_id = intent["id"]
             metadata = intent.get("metadata", {})
-            print("metadata: ", metadata)
-            parcel_id = metadata.get("parcel_id")
+            parcel_ids = metadata.get("parcel_ids", "").split(",")
 
             # Update transaction status
-            PaymentTransaction.objects.filter(
-                stripe_payment_intent=transaction_id
-            ).update(status="success")
+            PaymentTransaction.objects.filter(stripe_payment_intent=transaction_id).update(status="success")
 
-            # Mark the parcel as purchased
-            if parcel_id:
+            # Update parcels
+            for parcel_id in parcel_ids:
                 try:
                     parcel = Parcel.objects.get(id=parcel_id)
-                    parcel["status"] = "purchased"
+                    parcel.status = "purchased"
                     parcel.save()
                 except Parcel.DoesNotExist:
-                    pass
+                    continue
 
         elif event["type"] == "payment_intent.payment_failed":
             intent = event["data"]["object"]
             transaction_id = intent["id"]
-            PaymentTransaction.objects.filter(
-                stripe_payment_intent=transaction_id
-            ).update(status="failed")
+            PaymentTransaction.objects.filter(stripe_payment_intent=transaction_id).update(status="failed")
 
         return Response({"status": "success"})
