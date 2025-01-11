@@ -83,5 +83,12 @@ class Command(BaseCommand):
                 else:
                     print(f"No geometry found for feature {feature_id}")
 
+        for p in Parcel.objects.all():
+            geom = p.polygon
+            geom.srid = 25832
+            geom.transform(4326)
+            p.polygon = geom
+            p.save()
+
         self.stdout.write(self.style.SUCCESS(
             f"Successfully imported {len(fs)} features."))
