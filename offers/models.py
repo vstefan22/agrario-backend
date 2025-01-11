@@ -13,6 +13,14 @@ from django.db import models
 from django.utils.translation import gettext_lazy as _
 from accounts.models import Landowner, MarketUser
 import random
+from django.db.models import JSONField
+from django.contrib.gis.db import models as gis_models
+import uuid
+from django.core.validators import MinLengthValidator
+from django.db import models
+from django.utils.translation import gettext_lazy as _
+from accounts.models import Landowner, MarketUser
+import random
 
 
 class Landuse(models.Model):
@@ -34,6 +42,7 @@ class Landuse(models.Model):
 class Parcel(models.Model):
     """
     Defines the geometry of areas of land that landowners want to put on the marketplace.
+    Defines the geometry of areas of land that landowners want to put on the marketplace.
 
     Attributes:
         state_name: Name of the state where the parcel is located.
@@ -54,17 +63,24 @@ class Parcel(models.Model):
         ("available", "Available"),
         ("purchased", "Purchased"),
     ]
+    alkis_feature_id = models.CharField(max_length=30)
+    zipcode = models.CharField(null=True, blank=True, max_length=30)
 
-    state_name = models.CharField(max_length=64)
-    district_name = models.CharField(max_length=64)
-    municipality_name = models.CharField(max_length=64)
-    cadastral_area = models.CharField(max_length=64)
-    cadastral_sector = models.CharField(max_length=64)
+    state_name = models.CharField(max_length=255)
+    district_name = models.CharField(max_length=255)
+    municipality_name = models.CharField(max_length=255)
+    cadastral_area = models.CharField(max_length=255)
+
+    communal_district = models.CharField(max_length=64)
+    cadastral_parcel = models.CharField(max_length=255)
+
     plot_number_main = models.CharField(max_length=8, null=True)
-    plot_number_secondary = models.CharField(max_length=8)
-    land_use = models.CharField(max_length=255)
+    plot_number_secondary = models.CharField(
+        max_length=8, null=True, blank=True)
+    land_use = models.CharField(null=True, blank=True, max_length=255)
     area_square_meters = models.DecimalField(max_digits=12, decimal_places=2)
-    polygon = gis_models.PolygonField(
+
+    polygon = gis_models.MultiPolygonField(
         null=True, blank=True)  # GeoDjango field for polygons
     status = models.CharField(
         max_length=20, choices=STATUS_CHOICES, default="available")
@@ -73,12 +89,26 @@ class Parcel(models.Model):
         "AreaOffer", related_name="parcels", on_delete=models.SET_NULL, null=True
     )
     created_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="created_parcels"
+
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.CASCADE, related_name="created_parcels"
     )
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
         return f"Parcel in {self.state_name}, {self.district_name}"
+
+
+class BasketItem(models.Model):
+    """
+    Represents a parcel in the user's basket.
+    """
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="basket_items")
+    parcel = models.ForeignKey(Parcel, on_delete=models.CASCADE)
+    added_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ("user", "parcel")
 
 
 class AreaOffer(models.Model):

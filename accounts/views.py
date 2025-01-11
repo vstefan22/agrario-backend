@@ -16,11 +16,21 @@ from drf_yasg.utils import swagger_auto_schema
 from rest_framework import status, viewsets
 from rest_framework.authtoken.models import Token
 from rest_framework.decorators import action, permission_classes, authentication_classes
+from rest_framework.decorators import action, permission_classes, authentication_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.exceptions import AuthenticationFailed
 from rest_framework.exceptions import AuthenticationFailed
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from offers.models import AreaOffer, Parcel
+from .models import MarketUser, Landowner, ProjectDeveloper
+from .firebase_auth import FirebaseAuthentication, verify_firebase_token, create_firebase_user
+from .serializers import UserSerializer, LandownerSerializer, ProjectDeveloperSerializer, LandownerDashboardSerializer
+from django.utils.encoding import force_bytes
+from django.utils.http import urlsafe_base64_encode
+from firebase_admin import auth as firebase_auth
+from google.cloud import storage
+from .utils import get_user_role
 from .models import MarketUser, Landowner, ProjectDeveloper
 from .firebase_auth import FirebaseAuthentication, verify_firebase_token, create_firebase_user
 from .serializers import UserSerializer, LandownerSerializer, ProjectDeveloperSerializer, LandownerDashboardSerializer
@@ -45,13 +55,23 @@ class MarketUserViewSet(viewsets.ModelViewSet):
         if self.action in ["create", "confirm_email"]:
             return [AllowAny()]
         return [IsAuthenticated()]
-    
+
+    @swagger_auto_schema(
+        tags=["User Management"],
+        operation_summary="Register a new user",
+        operation_description="Create a new user by providing username, email, password, and role.",
+        request_body=UserRegistrationSerializer,
+        responses={
+            201: openapi.Response("User registered successfully"),
+            400: "Validation error",
+        },
+    )
     def create(self, request, *args, **kwargs):
         """
         Handles user registration, Firebase user creation, and email confirmation.
         """
         role = request.data.get("role")
-        
+
         if role == "landowner":
             serializer_class = LandownerSerializer
         elif role == "developer":
@@ -175,11 +195,11 @@ class LoginView(APIView):
             type=openapi.TYPE_OBJECT,
             properties={
                 "email": openapi.Schema(
-                    type=openapi.TYPE_STRING, 
+                    type=openapi.TYPE_STRING,
                     description="The email address of the user"
                 ),
                 "password": openapi.Schema(
-                    type=openapi.TYPE_STRING, 
+                    type=openapi.TYPE_STRING,
                     description="The password of the user"
                 ),
             },
@@ -249,6 +269,7 @@ class LoginView(APIView):
         # Authenticate user using Firebase
         try:
             user_record = firebase_auth.get_user_by_email(email)
+            print(user_record)
         except firebase_auth.UserNotFoundError:
             return Response(
                 {"error": "Invalid email or password."},
@@ -263,7 +284,9 @@ class LoginView(APIView):
         # Verify the password using Firebase's REST API
         try:
             firebase_token = self.verify_firebase_password(email, password)
+            print('F', firebase_token)
         except AuthenticationFailed as e:
+            print(e)
             return Response(
                 {"error": str(e)},
                 status=status.HTTP_401_UNAUTHORIZED,
@@ -274,6 +297,7 @@ class LoginView(APIView):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
+        print('WTF')
         # Retrieve the user from the database
         try:
             user = MarketUser.objects.get(email=email)
@@ -289,9 +313,9 @@ class LoginView(APIView):
                 {"error": "Please confirm your email address before logging in."},
                 status=status.HTTP_403_FORBIDDEN,
             )
-        
-        user_data = UserSerializer(user).data
 
+        user_data = UserSerializer(user).data
+        print(user_data)
         # Return the Firebase token and user details
         return Response(
             {
@@ -302,6 +326,64 @@ class LoginView(APIView):
             },
             status=status.HTTP_200_OK,
         )
+
+    def verify_firebase_password(self, email, password):
+        """
+        Verifies the provided email and password using Firebase's REST API.
+
+        Args:
+            email (str): The user's email address.
+            password (str): The user's password.
+
+        Returns:
+            str: A Firebase ID token if authentication is successful.
+
+        Raises:
+            AuthenticationFailed: If the email or password is incorrect.
+        """
+        firebase_api_key = settings.FIREBASE_API_KEY
+        url = f"https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key={firebase_api_key}"
+        payload = {
+            "email": email,
+            "password": password,
+            "returnSecureToken": True,
+        }
+
+        response = requests.post(url, json=payload)
+        if response.status_code != 200:
+            raise AuthenticationFailed("Invalid email or password.")
+
+        data = response.json()
+        return data["idToken"]
+
+    def verify_firebase_password(self, email, password):
+        """
+        Verifies the provided email and password using Firebase's REST API.
+
+        Args:
+            email (str): The user's email address.
+            password (str): The user's password.
+
+        Returns:
+            str: A Firebase ID token if authentication is successful.
+
+        Raises:
+            AuthenticationFailed: If the email or password is incorrect.
+        """
+        firebase_api_key = settings.FIREBASE_API_KEY
+        url = f"https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key={firebase_api_key}"
+        payload = {
+            "email": email,
+            "password": password,
+            "returnSecureToken": True,
+        }
+
+        response = requests.post(url, json=payload)
+        if response.status_code != 200:
+            raise AuthenticationFailed("Invalid email or password.")
+
+        data = response.json()
+        return data["idToken"]
 
     def verify_firebase_password(self, email, password):
         """
@@ -348,7 +430,8 @@ class RoleDashboardView(APIView):
             from django.conf import settings
 
             # Initialize Google Cloud Storage client using GS_CREDENTIALS
-            storage_client = storage.Client(credentials=settings.GS_CREDENTIALS, project=settings.G_CLOUD_PROJECT_ID)
+            storage_client = storage.Client(
+                credentials=settings.GS_CREDENTIALS, project=settings.G_CLOUD_PROJECT_ID)
             bucket = storage_client.bucket(settings.G_CLOUD_BUCKET_NAME_STATIC)
 
             # Correct prefix based on folder structure
@@ -356,7 +439,8 @@ class RoleDashboardView(APIView):
             blobs = bucket.list_blobs(prefix=prefix)
 
             # Collect public URLs for the files
-            tutorial_links = [blob.public_url for blob in blobs if not blob.name.endswith("/")]
+            tutorial_links = [
+                blob.public_url for blob in blobs if not blob.name.endswith("/")]
 
             # Log if no files were found
             if not tutorial_links:
@@ -364,21 +448,22 @@ class RoleDashboardView(APIView):
 
             return tutorial_links
         except Exception as e:
-            logger.error(f"Error retrieving tutorial links for role '{role}': {e}")
+            logger.error(
+                f"Error retrieving tutorial links for role '{role}': {e}")
             return []
 
-   
-    
     def get_landowner_data(self, user):
         """
         Fetch additional dashboard data for landowners.
         """
         parcels_owned = user.created_parcels.count()
-        parcels_pending_analysis = user.created_parcels.filter(status="pending_analysis").count()
+        parcels_pending_analysis = user.created_parcels.filter(
+            status="pending_analysis").count()
 
         # Fetch unread messages count
         from messaging.models import Message  # Replace with the correct model path
-        unread_messages = Message.objects.filter(sender=user, is_read=False).count()
+        unread_messages = Message.objects.filter(
+            sender=user, is_read=False).count()
 
         return {
             "parcels_owned": parcels_owned,
@@ -387,13 +472,15 @@ class RoleDashboardView(APIView):
                 "unread_messages": unread_messages,
             },
         }
-    
+
     def get_developer_data(self, user):
         """
         Fetch additional dashboard data for developers.
         """
-        active_projects = user.projects.filter(status="active").count()  # Assuming `projects` is a related name
-        projects_pending_approval = user.projects.filter(status="pending_approval").count()
+        active_projects = user.projects.filter(
+            status="active").count()  # Assuming `projects` is a related name
+        projects_pending_approval = user.projects.filter(
+            status="pending_approval").count()
         notifications = []  # Fetch notifications if implemented
 
         return {
@@ -497,6 +584,7 @@ class RoleDashboardView(APIView):
 
         return Response(dashboard_data, status=status.HTTP_200_OK)
 
+
 class MarketUserProfileView(viewsets.ViewSet):
     """
     ViewSet for managing MarketUser profiles, dynamically choosing serializers based on user role.
@@ -549,7 +637,7 @@ class MarketUserProfileView(viewsets.ViewSet):
             return MarketUser.objects.get(email=email)
         except MarketUser.DoesNotExist:
             return Response({"error": "User does not exist."}, status=status.HTTP_404_NOT_FOUND)
-        
+
     @swagger_auto_schema(
         operation_summary="Retrieve User Profile",
         operation_description="Get profile details of the authenticated user based on their role.",
@@ -559,7 +647,6 @@ class MarketUserProfileView(viewsets.ViewSet):
             404: openapi.Response(description="User not found"),
         },
     )
-
     def retrieve(self, request, *args, **kwargs):
         """
         Retrieve the profile details of the authenticated user.
@@ -570,12 +657,14 @@ class MarketUserProfileView(viewsets.ViewSet):
 
         if user.role == "landowner":
             try:
-                user_instance = Landowner.objects.get(identifier=user.identifier)
+                user_instance = Landowner.objects.get(
+                    identifier=user.identifier)
             except Landowner.DoesNotExist:
                 return Response({"error": "Landowner instance not found."}, status=status.HTTP_404_NOT_FOUND)
         elif user.role == "developer":
             try:
-                user_instance = ProjectDeveloper.objects.filter(identifier=user.identifier).select_related("interest").first()
+                user_instance = ProjectDeveloper.objects.filter(
+                    identifier=user.identifier).select_related("interest").first()
             except ProjectDeveloper.DoesNotExist:
                 return Response({"error": "Developer instance not found."}, status=status.HTTP_404_NOT_FOUND)
         else:
@@ -587,7 +676,7 @@ class MarketUserProfileView(viewsets.ViewSet):
 
         serializer = serializer_class(user_instance)
         return Response(serializer.data, status=status.HTTP_200_OK)
-    
+
     @swagger_auto_schema(
         operation_summary="Update User Profile",
         operation_description="Update profile details of the authenticated user based on their role.",
@@ -606,7 +695,6 @@ class MarketUserProfileView(viewsets.ViewSet):
             400: openapi.Response(description="Validation errors or unsupported role"),
         },
     )
-
     def partial_update(self, request, *args, **kwargs):
         """
         Update the profile details of the authenticated user.
@@ -624,12 +712,14 @@ class MarketUserProfileView(viewsets.ViewSet):
         # Fetch the correct subclass instance (Landowner or Developer)
         if user.role == "landowner":
             try:
-                user_instance = Landowner.objects.get(identifier=user.identifier)
+                user_instance = Landowner.objects.get(
+                    identifier=user.identifier)
             except Landowner.DoesNotExist:
                 return Response({"error": "Landowner instance not found."}, status=status.HTTP_404_NOT_FOUND)
         elif user.role == "developer":
             try:
-                user_instance = ProjectDeveloper.objects.filter(identifier=user.identifier).select_related("interest").first()
+                user_instance = ProjectDeveloper.objects.filter(
+                    identifier=user.identifier).select_related("interest").first()
             except ProjectDeveloper.DoesNotExist:
                 return Response({"error": "Developer instance not found."}, status=status.HTTP_404_NOT_FOUND)
         else:
@@ -641,12 +731,12 @@ class MarketUserProfileView(viewsets.ViewSet):
             return Response({"error": "Unsupported role."}, status=status.HTTP_400_BAD_REQUEST)
 
         # Pass the specific subclass instance to the serializer
-        serializer = serializer_class(user_instance, data=request.data, partial=True)
+        serializer = serializer_class(
+            user_instance, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         serializer.save()
 
         return Response(serializer.data, status=status.HTTP_200_OK)
-
 
 
 class FirebasePasswordResetRequestView(APIView):
@@ -674,7 +764,8 @@ class FirebasePasswordResetRequestView(APIView):
         responses={
             200: openapi.Response(
                 description="Password reset email sent successfully.",
-                examples={"application/json": {"message": "Password reset email sent successfully."}},
+                examples={
+                    "application/json": {"message": "Password reset email sent successfully."}},
             ),
             400: openapi.Response(
                 description="Bad Request - Invalid email address provided.",
@@ -682,7 +773,6 @@ class FirebasePasswordResetRequestView(APIView):
             ),
         },
     )
- 
     def post(self, request):
         email = request.data.get("email")
 

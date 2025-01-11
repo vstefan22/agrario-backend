@@ -35,6 +35,8 @@ FRONTEND_URL = os.getenv('FRONTEND_URL')
 BACKEND_URL = os.getenv('BACKEND_URL')
 STRIPE_SECRET_KEY = os.getenv('STRIPE_SECRET_KEY')
 
+ANALYSE_PLUS_RATE = 2
+
 ALLOWED_HOSTS = [
     '127.0.0.1',
     'localhost',
@@ -106,6 +108,7 @@ INSTALLED_APPS = [
     'rest_framework.authtoken',
     'drf_yasg',
     'django_filters',
+    "rest_framework_gis",
 
     # custom apps
     'accounts',
@@ -134,7 +137,7 @@ REST_FRAMEWORK = {
         'rest_framework.authentication.TokenAuthentication',
     ],
     'DEFAULT_PERMISSION_CLASSES': [
-        'rest_framework.permissions.IsAuthenticated',
+        # 'rest_framework.permissions.IsAuthenticated',
     ],
     'EXCEPTION_HANDLER': 'rest_framework.views.exception_handler',
 }
@@ -192,7 +195,8 @@ if firebase_credentials_path and os.path.exists(firebase_credentials_path):
     with open(firebase_credentials_path, "r") as f:
         firebase_config = json.load(f)
 elif firebase_credentials_base64:
-    firebase_config = json.loads(base64.b64decode(firebase_credentials_base64).decode("utf-8"))
+    firebase_config = json.loads(base64.b64decode(
+        firebase_credentials_base64).decode("utf-8"))
 else:
     firebase_config = None  # Default to None to handle missing credentials
 
