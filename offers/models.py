@@ -40,7 +40,7 @@ class Parcel(models.Model):
         district_name: Name of the district where the parcel is located.
         municipality_name: Name of the municipality.
         cadastral_area: Cadastral area of the parcel.
-        cadastral_sector: Cadastral sector of the parcel.
+        cadastral_parcel: Cadastral sector of the parcel.
         plot_number_main: Main plot number.
         plot_number_secondary: Secondary plot number.
         land_use: Description of land usage.
@@ -86,14 +86,14 @@ class Parcel(models.Model):
 
     def __str__(self):
         return f"Parcel in {self.state_name}, {self.district_name}"
-    
 
 
 class BasketItem(models.Model):
     """
     Represents a parcel in the user's basket.
     """
-    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="basket_items")
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="basket_items")
     parcel = models.ForeignKey(Parcel, on_delete=models.CASCADE)
     added_at = models.DateTimeField(auto_now_add=True)
 
@@ -151,9 +151,9 @@ class AreaOffer(models.Model):
     utilization = models.CharField(
         max_length=2, choices=AreaUtilization.choices, default=AreaUtilization.NO_RESTRICTION
     )
-    
+
     # excluded_landuse = models.ManyToManyField(Landuse, related_name="offers")
-    
+
     class DeveloperRegionality(models.TextChoices):
         NO_RESTRICTION = "NO", _("Keine Einschränkung")
         GERMANY = "DE", _("Firmensitz in Deutschland")
@@ -162,6 +162,7 @@ class AreaOffer(models.Model):
     preferred_regionality = models.TextField(
         choices=DeveloperRegionality, default=DeveloperRegionality.NO_RESTRICTION
     )
+
     class ShareholderModel(models.TextChoices):
         NO_RESTRICTION = "NO", _("Keine Einschränkung")
         SHARES_INCOME = "IN", _("Beteiligungen am Erlös")
@@ -171,7 +172,7 @@ class AreaOffer(models.Model):
     shareholder_model = models.TextField(
         choices=ShareholderModel, default=ShareholderModel.NO_RESTRICTION
     )
-    
+
     important_remarks = models.TextField()
 
     def __str__(self):
