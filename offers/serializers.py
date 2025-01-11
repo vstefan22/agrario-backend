@@ -73,42 +73,44 @@ class ParcelSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ["created_by", "area_square_meters"]
 
+    def validate_polygon(self, value):
+        """
+        Custom validation for the polygon field.
+        Ensures it is a valid list of lat/lng points and converts to MultiPolygon.
+        """
+        if not isinstance(value, list):
+            raise serializers.ValidationError(
+                "Polygon must be a list of coordinates.")
+
+        if len(value) < 3:
+            raise serializers.ValidationError(
+                "Polygon must have at least 3 points.")
+
+        try:
+            # Convert lat/lng pairs to (lng, lat) tuples
+            coords = [(point["lng"], point["lat"]) for point in value]
+
+            # Ensure the polygon is closed
+            if coords[0] != coords[-1]:
+                coords.append(coords[0])
+
+            # Create a GEOS Polygon
+            polygon = Polygon(coords, srid=4326)
+
+            # Wrap in a MultiPolygon
+            multipolygon = MultiPolygon(polygon, srid=4326)
+
+            return multipolygon
+
+        except (KeyError, TypeError, GEOSException) as e:
+            logger.error(f"Error validating polygon: {e}")
+            raise serializers.ValidationError("Invalid polygon data provided.")
+
     def create(self, validated_data):
-        # Extract polygon data from validated data
-        polygon_data = validated_data.pop("polygon", None)
-        if polygon_data:
-            try:
-                logger.info(f"Raw Polygon Data: {polygon_data}")
-
-                # Validate polygon_data format
-                if not isinstance(polygon_data, list) or len(polygon_data) < 3:
-                    raise ValidationError(
-                        "Polygon must have at least 3 points.")
-
-                # Convert latitude/longitude pairs to GEOS Polygon
-                coords = [(point["lng"], point["lat"])
-                          for point in polygon_data]
-
-                # Create a GEOS Polygon
-                polygon = Polygon(coords, srid=4326)  # EPSG:4326 is WGS84
-                multipolygon = MultiPolygon(polygon, srid=4326)
-                logger.info(f"Created Polygon: {polygon}")
-
-                # Optionally, transform to a different SRID (e.g., 3857) for area calculation
-                # Transform to Web Mercator for accurate area calculation
-                multipolygon.transform(3857)
-
-                # Store the polygon and calculate the area in square meters
-                validated_data["polygon"] = multipolygon
-
-                logger.info(f"Polygon Area: {polygon.area} square meters")
-            except (GEOSException, ValidationError, KeyError, TypeError) as e:
-                logger.error(f"Error processing polygon data: {e}")
-                raise serializers.ValidationError(
-                    "Invalid polygon data provided.")
-        else:
-            logger.warning("No polygon data provided.")
-
+        """
+        Create a Parcel instance with validated polygon data.
+        """
+        logger.info(f"Creating Parcel with data: {validated_data}")
         return super().create(validated_data)
 
     def validate_area(self, polygon):
