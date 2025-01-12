@@ -77,7 +77,6 @@ class ParcelSerializer(serializers.ModelSerializer):
             "municipality_name",
             "cadastral_area",
             "cadastral_parcel",
-
             "plot_number_main",
             "plot_number_secondary",
             "land_use",
@@ -96,39 +95,6 @@ class ParcelSerializer(serializers.ModelSerializer):
         if obj.polygon:
             return obj.polygon.geojson  # or obj.polygon.wkt
         return None
-
-    def validate_polygon(self, value):
-        """
-        Custom validation for the polygon field.
-        Ensures it is a valid list of lat/lng points and converts to MultiPolygon.
-        """
-        if not isinstance(value, list):
-            raise serializers.ValidationError(
-                "Polygon must be a list of coordinates.")
-
-        if len(value) < 3:
-            raise serializers.ValidationError(
-                "Polygon must have at least 3 points.")
-
-        try:
-            # Convert lat/lng pairs to (lng, lat) tuples
-            coords = [(point["lng"], point["lat"]) for point in value]
-
-            # Ensure the polygon is closed
-            if coords[0] != coords[-1]:
-                coords.append(coords[0])
-
-            # Create a GEOS Polygon
-            polygon = Polygon(coords, srid=4326)
-
-            # Wrap in a MultiPolygon
-            multipolygon = MultiPolygon(polygon, srid=4326)
-
-            return multipolygon
-
-        except (KeyError, TypeError, GEOSException) as e:
-            logger.error(f"Error validating polygon: {e}")
-            raise serializers.ValidationError("Invalid polygon data provided.")
 
     def create(self, validated_data):
         """
