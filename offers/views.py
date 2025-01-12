@@ -35,10 +35,6 @@ from .serializers import (
 from accounts.firebase_auth import verify_firebase_token
 
 from django.contrib.gis.db.models.functions import Transform
-from rest_framework.mixins import ListModelMixin
-
-from rest_framework.viewsets import GenericViewSet
-from rest_framework import viewsets, mixins
 
 
 # for p in Parcel.objects.all():
@@ -58,29 +54,6 @@ class ParcelGeoViewSet(viewsets.ModelViewSet):
             polygon_4326=Transform('polygon', 4326)
         )
 
-
-# Parcel.objects.all().delete()
-
-
-# for p in Parcel.objects.all():
-#     geom = p.polygon
-#     geom.srid = 25832
-#     geom.transform(4326)
-#     p.polygon = geom
-#     p.save()
-
-
-class ParcelGeoViewSet(viewsets.ModelViewSet):
-    serializer_class = ParcelGeoSerializer
-
-    def get_queryset(self):
-        return Parcel.objects.annotate(
-            # working if SRID is correct
-            polygon_4326=Transform('polygon', 4326)
-        )
-
-
-# Parcel.objects.all().delete()
 
 # Configure logger
 logger = logging.getLogger(__name__)
