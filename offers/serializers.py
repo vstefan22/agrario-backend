@@ -15,7 +15,7 @@ from .models import (
 )
 from reports.models import Report
 import logging
-from django.contrib.gis.geos import GEOSGeometry
+from django.contrib.gis.geos import GEOSGeometry, MultiPolygon
 from django.contrib.gis.gdal import SpatialReference, CoordTransform
 from rest_framework_gis.serializers import GeoFeatureModelSerializer
 
@@ -49,8 +49,21 @@ class LanduseSerializer(serializers.ModelSerializer):
 
 class ParcelSerializer(serializers.ModelSerializer):
     """
-    Serializer for the Parcel model.
+    We'll make `polygon` read-only and define `polygon_coords`
+    for the list of { lat, lng } points from the frontend.
     """
+
+    # `polygon` is read-only in API, so DRF won't try to parse it as geometry
+    polygon = serializers.SerializerMethodField(read_only=True)
+
+    # We'll expect an array of objects like [{ lat: 51.8, lng: 7.46 }, ... ]
+    # on POST/PUT requests
+    polygon_coords = serializers.ListField(
+        child=serializers.DictField(child=serializers.FloatField()),
+        write_only=True,
+        required=False,
+        help_text="Array of { lat, lng } points describing the polygon ring."
+    )
 
     class Meta:
         model = Parcel
@@ -60,73 +73,109 @@ class ParcelSerializer(serializers.ModelSerializer):
             "district_name",
             "municipality_name",
             "cadastral_area",
-            "cadastral_sector",
+            "cadastral_parcel",
             "plot_number_main",
             "plot_number_secondary",
             "land_use",
             "area_square_meters",
             "created_by",
-            "polygon",
+            "polygon",            # read-only
+            "polygon_coords",     # write-only
         ]
-        read_only_fields = ["created_by", "area_square_meters"]
+        read_only_fields = ["created_by", "area_square_meters", "polygon"]
+
+    def get_polygon(self, obj):
+        """
+        Return a simple representation of the polygon if you want to
+        show it in GET responses. For example, GeoJSON or WKT.
+        """
+        if obj.polygon:
+            return obj.polygon.geojson  # or obj.polygon.wkt
+        return None
 
     def create(self, validated_data):
-        polygon_data = validated_data.pop("polygon", None)
-        if polygon_data:
+        """
+        Build the real 'polygon' from `polygon_coords` if provided.
+        """
+        polygon_coords = validated_data.pop("polygon_coords", None)
+
+        if polygon_coords and isinstance(polygon_coords, list):
+            logger.info(f"Received polygon_coords: {polygon_coords}")
+
+            # Convert that array of { lat, lng } to a GeoJSON "Polygon"
+            ring = []
+            for point in polygon_coords:
+                # Each `point` is a dict: { "lat": ..., "lng": ... }
+                lat = point["lat"]
+                lng = point["lng"]
+                ring.append([lng, lat])  # GeoJSON order: [lng, lat]
+
+            # Close the ring if needed (first == last)
+            if ring and ring[0] != ring[-1]:
+                ring.append(ring[0])
+
+            polygon_geojson = {
+                "type": "Polygon",
+                "coordinates": [ring],  # single ring
+            }
+            logger.info(f"Constructed Polygon GeoJSON: {polygon_geojson}")
+
             try:
-                # Log the raw polygon data
-                logger.info(f"Raw Polygon Data: {polygon_data}")
+                geom = GEOSGeometry(str(polygon_geojson), srid=4326)
+                # If you want to calculate area in m², transform to WebMerc (EPSG:3857) or any projected SRID
+                if geom.geom_type == "Polygon":
+                    geom = MultiPolygon(geom, srid=geom.srid)
+                geom_3857 = geom.clone()
+                geom_3857.transform(3857)
+                area_sqm = geom_3857.area
 
-                # Convert to GeoJSON and log it
-                polygon_geojson = {
-                    "type": polygon_data.get("type"),
-                    "coordinates": polygon_data.get("coordinates"),
-                }
-                logger.info(f"Polygon GeoJSON: {polygon_geojson}")
-
-                # Convert GeoJSON to GEOSGeometry (assume input is EPSG:4326)
-                polygon = GEOSGeometry(str(polygon_geojson), srid=4326)
-
-                # Transform to an equal-area CRS (e.g., EPSG:3857) for area calculation
-                polygon.transform(3857)
-
-                # Calculate area in square meters
-                area_square_meters = polygon.area
-                logger.info(f"Calculated Area (square meters): {
-                            area_square_meters}")
-
-                # Validate the area
-                if area_square_meters > 1e6 * 1000:  # 1,000 km²
-                    logger.error(f"Area is unrealistically large: {
-                                 area_square_meters} m²")
-                    raise ValueError(
-                        "The calculated area is too large and likely invalid.")
-                elif area_square_meters < 1.0:  # Less than 1 m²
-                    logger.error(f"Area is unrealistically small: {
-                                 area_square_meters} m²")
-                    raise ValueError(
-                        "The calculated area is too small and likely invalid.")
-
-                # Save the polygon and area
-                validated_data["polygon"] = polygon
-                validated_data["area_square_meters"] = round(
-                    area_square_meters, 2)
+                validated_data["polygon"] = geom  # store in lat/lng
+                validated_data["area_square_meters"] = round(area_sqm, 2)
             except Exception as e:
-                logger.error(f"Error processing polygon data: {e}")
-                validated_data["area_square_meters"] = 0  # Fallback to zero
-        else:
-            logger.warning("No polygon data provided.")
+                logger.error(
+                    f"Error creating geometry from polygon_coords: {e}")
+                raise serializers.ValidationError({
+                    "polygon": ["Invalid polygon coordinates."]
+                })
 
+        # If not provided, do nothing; polygon remains None
         return super().create(validated_data)
 
-    def validate_area(self, polygon):
+    def update(self, instance, validated_data):
         """
-        Validate the calculated area to ensure it is within reasonable limits.
+        Similarly handle updates if needed.
         """
-        if polygon.area > 10_000_000:  # Example: 10 million m² or 10 km²
-            raise serializers.ValidationError(
-                "The area of the polygon is too large.")
-        return polygon
+        polygon_coords = validated_data.pop("polygon_coords", None)
+
+        if polygon_coords and isinstance(polygon_coords, list):
+            # same logic as in create()
+            ring = []
+            for point in polygon_coords:
+                lat = point["lat"]
+                lng = point["lng"]
+                ring.append([lng, lat])
+            if ring and ring[0] != ring[-1]:
+                ring.append(ring[0])
+
+            polygon_geojson = {
+                "type": "Polygon",
+                "coordinates": [ring],
+            }
+            try:
+                geom = GEOSGeometry(str(polygon_geojson), srid=4326)
+                geom_3857 = geom.clone()
+                geom_3857.transform(3857)
+                area_sqm = geom_3857.area
+
+                instance.polygon = geom
+                instance.area_square_meters = round(area_sqm, 2)
+            except Exception as e:
+                logger.error(f"Error updating geometry: {e}")
+                raise serializers.ValidationError({
+                    "polygon": ["Invalid polygon coordinates."]
+                })
+
+        return super().update(instance, validated_data)
 
 
 class AreaOfferDocumentsSerializer(serializers.ModelSerializer):
