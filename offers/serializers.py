@@ -15,6 +15,7 @@ from .models import (
     AreaOfferDocuments,
     Landuse,
     Parcel,
+    Watchlist
 )
 from reports.models import Report
 import logging
@@ -180,6 +181,26 @@ class ParcelSerializer(serializers.ModelSerializer):
                 })
 
         return super().update(instance, validated_data)
+    
+class ParcelListSerializer(serializers.ModelSerializer):
+    """
+    Serializer for listing parcels with limited fields.
+    """
+    class Meta:
+        model = Parcel
+        fields = ["id", "state_name", "land_use", "area_square_meters", "polygon"]
+        read_only_fields = ["id", "area_square_meters"]
+
+class WatchlistSerializer(serializers.ModelSerializer):
+    """
+    Serializer for user's watchlist.
+    """
+    parcel_details = ParcelListSerializer(source="parcel", read_only=True)
+
+    class Meta:
+        model = Watchlist
+        fields = ["id", "parcel", "parcel_details", "added_at"]
+        read_only_fields = ["added_at"]
 
 
 class AreaOfferDocumentsSerializer(serializers.ModelSerializer):

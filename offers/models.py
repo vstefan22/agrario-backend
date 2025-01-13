@@ -244,3 +244,17 @@ class Region(models.Model):
     )
 
     geom = gis_models.MultiPolygonField(null=True, blank=True)
+
+
+class Watchlist(models.Model):
+    """
+    Represents a user's watchlist for parcels.
+    """
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="watchlist"
+    )
+    parcel = models.ForeignKey(Parcel, on_delete=models.CASCADE, related_name="watched_by")
+    added_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ("user", "parcel")

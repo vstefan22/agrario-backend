@@ -23,6 +23,7 @@ from .models import (
     Landuse,
     Parcel,
     BasketItem,
+    Watchlist
 )
 from .serializers import (
     AreaOfferDocumentsSerializer,
@@ -30,19 +31,12 @@ from .serializers import (
     AuctionPlacementSerializer,
     LanduseSerializer,
     ParcelSerializer,
-    ParcelGeoSerializer
+    ParcelGeoSerializer,
+    WatchlistSerializer
 )
 from accounts.firebase_auth import verify_firebase_token
 
 from django.contrib.gis.db.models.functions import Transform
-
-
-# for p in Parcel.objects.all():
-#     geom = p.polygon
-#     geom.srid = 25832
-#     geom.transform(4326)
-#     p.polygon = geom
-#     p.save()
 
 
 class ParcelGeoViewSet(viewsets.ModelViewSet):
@@ -538,6 +532,53 @@ class ParcelViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(area_square_meters__lte=max_area)
 
         return queryset
+    
+    @action(detail=False, methods=["post"], url_path="add-to-watchlist")
+    def add_to_watchlist(self, request):
+        """
+        Add a parcel to the user's watchlist.
+        """
+        parcel_id = request.data.get("parcel_id")
+        if not parcel_id:
+            return Response({"error": "Parcel ID is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            parcel = Parcel.objects.get(id=parcel_id)
+            watchlist_item, created = Watchlist.objects.get_or_create(
+                user=request.user, parcel=parcel
+            )
+            if not created:
+                return Response({"error": "Parcel is already in the watchlist."}, status=status.HTTP_400_BAD_REQUEST)
+
+            serializer = WatchlistSerializer(watchlist_item)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        except Parcel.DoesNotExist:
+            return Response({"error": "Parcel not found."}, status=status.HTTP_404_NOT_FOUND)
+
+    @action(detail=False, methods=["post"], url_path="remove-from-watchlist")
+    def remove_from_watchlist(self, request):
+        """
+        Remove a parcel from the user's watchlist.
+        """
+        parcel_id = request.data.get("parcel_id")
+        if not parcel_id:
+            return Response({"error": "Parcel ID is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            watchlist_item = Watchlist.objects.get(user=request.user, parcel_id=parcel_id)
+            watchlist_item.delete()
+            return Response({"message": "Parcel removed from watchlist."}, status=status.HTTP_200_OK)
+        except Watchlist.DoesNotExist:
+            return Response({"error": "Parcel not in the watchlist."}, status=status.HTTP_404_NOT_FOUND)
+
+    @action(detail=False, methods=["get"], url_path="watchlist")
+    def list_watchlist(self, request):
+        """
+        List all parcels in the user's watchlist.
+        """
+        watchlist_items = Watchlist.objects.filter(user=request.user)
+        serializer = WatchlistSerializer(watchlist_items, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
 
 class ParcelOwnershipPermission(IsAuthenticated):
