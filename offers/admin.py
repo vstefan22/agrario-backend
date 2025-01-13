@@ -80,7 +80,7 @@ class AreaOfferConfirmationAdmin(admin.ModelAdmin):
     Admin configuration for the AreaOfferConfirmation model.
     """
 
-    list_display = ("id", "offer", "confirmed_by", "confirmed_at")
+    list_display = ("identifier", "offer", "confirmed_by", "confirmed_at")
 
 @admin.register(AreaOfferAdministration)
 class AreaOfferAdministrationAdmin(admin.ModelAdmin):

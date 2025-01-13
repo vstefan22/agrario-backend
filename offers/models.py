@@ -22,6 +22,14 @@ from django.utils.translation import gettext_lazy as _
 from accounts.models import Landowner, MarketUser
 import random
 
+class Currency(models.TextChoices):
+    EUR = "EUR", _("Euro")
+
+
+class Ternary(models.TextChoices):
+    YES = "YES", _("Ja")
+    NO = "NO", _("Nein")
+    NOT_SPECIFIED = "NOT", _("Keine Angabe")
 
 class Landuse(models.Model):
     """
@@ -214,15 +222,62 @@ class AreaOfferConfirmation(models.Model):
         confirmed_by: The user who confirmed the offer.
         confirmed_at: The timestamp when the offer was confirmed.
     """
+    identifier = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
 
+    
     offer = models.OneToOneField(
         AreaOffer, on_delete=models.CASCADE, related_name="confirmation"
     )
     confirmed_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
-    confirmed_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     confirmed_at = models.DateTimeField(auto_now_add=True)
+
+    utilitization = models.CharField(choices=AreaOffer.AreaUtilization.choices)
+
+    # if utilitization = SALE
+    sale_amount = models.DecimalField(
+        decimal_places=2, max_digits=10,
+        help_text=_("Angebotener Kaufpreis"),
+        null=True, blank=True
+    )
+
+    # if utilitization = LEASE
+    lease_amount_single_payment = models.DecimalField(
+        decimal_places=2, max_digits=10,
+        help_text=_("Einmalzahlung an Eigentümer bei Vertragsabschluss"),
+        null=True, blank=True
+    )
+    lease_amount_yearly_lease_year_one = models.DecimalField(
+        decimal_places=2, max_digits=10,
+        help_text=_("Jährliche Pacht in Jahr 1"),
+        null=True, blank=True
+    )
+    contracted_term_month = models.PositiveSmallIntegerField(
+        null=True, help_text=_("Vertragslaufzeit"),
+        blank=True
+    )
+    staggered_lease = models.TextField(
+        choices=Ternary.choices, null=True, help_text=_("Staffelpacht möglich?")
+    )
+    share_of_income = models.TextField(
+        choices=Ternary.choices,
+        help_text=_("Bieten Sie Beteiligungen an laufenden Erlösen?"),
+    )
+    shares_project_company = models.TextField(
+        choices=Ternary.choices,
+        help_text=_(
+            "Im Falle der Gründung einer Projektgesellschaft: Bieten Sie Beteiligungen an der Projektgesellschaft an?"
+        ),
+    )
+
+    message_to_landowner = models.TextField(
+        max_length=500, help_text=_("Ihre Nachricht an den Eigentümer zu dem Gebot")
+    )
+    message_to_platform = models.TextField(
+        max_length=500, help_text=_("Ihre Nachricht an Agrario Energy")
+    )
+
+    currency = models.CharField(choices=Currency.choices, default=Currency.EUR)
 
 
 class AreaOfferAdministration(models.Model):

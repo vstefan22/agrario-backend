@@ -74,6 +74,7 @@ class ParcelSerializer(serializers.ModelSerializer):
     class Meta:
         model = Parcel
         fields = [
+            "id",
             "state_name",
             "district_name",
             "municipality_name",

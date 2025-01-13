@@ -30,7 +30,7 @@ from .models import (
 from .serializers import (
     AreaOfferDocumentsSerializer,
     AreaOfferSerializer,
-    AuctionPlacementSerializer,
+    AreaOfferConfirmationSerializer,
     LanduseSerializer,
     ParcelSerializer,
     ParcelGeoSerializer,
@@ -642,6 +642,137 @@ class AreaOfferViewSet(viewsets.ModelViewSet):
         files = self.request.FILES.getlist('documents')
         for file in files:
             AreaOfferDocuments.objects.create(offer=offer, document=file)
+            
+    @action(detail=False, methods=["get"], url_path="active_offers", permission_classes=[FirebaseIsAuthenticated])
+    def list_active_offers(self, request):
+        """
+        Return all active area offers with status 'A'.
+        """
+        #staviti kad skontamo sa statusima sta kako gde
+        # active_offers = AreaOffer.objects.filter(status=AreaOffer.OfferStatus.ACTIVE)
+        active_offers = AreaOffer.objects.all()
+
+        serializer = AreaOfferSerializer(active_offers, many=True, context={'request': request})
+
+        return Response({"offers": serializer.data}, status=status.HTTP_200_OK)
+    
+    @action(detail=True, methods=["post"], url_path="submit_offer", permission_classes=[FirebaseIsAuthenticated])
+    def submit_offer(self, request, pk=None):
+        """
+        Developer submits an offer for an auction and confirms it.
+        """
+        try:
+            offer = get_object_or_404(AreaOffer, identifier=pk)
+
+            if hasattr(offer, 'confirmation'):
+                return Response({"error": "This offer has already been confirmed."}, status=status.HTTP_400_BAD_REQUEST)
+
+            user = request.user
+
+            if user.role != "developer":
+                return Response({"error": "Only developers can submit offers."}, status=status.HTTP_403_FORBIDDEN)
+
+            confirmation_data = request.data.copy()
+            confirmation_data["offer"] = str(offer.identifier)
+            confirmation_data["confirmed_by"] = str(user.id)
+
+            serializer = AreaOfferConfirmationSerializer(data=confirmation_data)
+
+            if serializer.is_valid():
+                serializer.save()
+                return Response({"message": "Offer successfully submitted and confirmed."}, status=status.HTTP_201_CREATED)
+            else:
+                return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        except AreaOffer.DoesNotExist:
+            return Response({"error": "Offer does not exist."}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    @action(detail=False, methods=["get"], url_path="submitted-offers", permission_classes=[FirebaseIsAuthenticated])
+    def submitted_offers(self, request):
+        try:
+            user = request.user
+            user_confirmations = AreaOfferConfirmation.objects.filter(confirmed_by=user)
+
+            response_data = []
+
+            for confirmation in user_confirmations:
+                offer = confirmation.offer
+
+                offer_serializer = AreaOfferSerializer(offer, context={'request': request})
+
+                confirmation_serializer = AreaOfferConfirmationSerializer(confirmation, context={'request': request})
+
+                response_data.append({
+                    "offer": offer_serializer.data,
+                    "offer_confirmation": confirmation_serializer.data
+                })
+
+            return Response({"offers": response_data}, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    @action(detail=True, methods=["get"], url_path="submitted-offers", permission_classes=[FirebaseIsAuthenticated])
+    def retrieve_submitted_offer(self, request, pk=None):
+
+        try:
+            offer_confirmation = get_object_or_404(AreaOfferConfirmation, identifier=pk)
+
+            if offer_confirmation.confirmed_by != request.user:
+                return Response(
+                    {"error": "You do not have permission to access this offer confirmation."},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+
+            offer = offer_confirmation.offer
+
+            offer_serializer = AreaOfferSerializer(offer, context={'request': request})
+
+            confirmation_serializer = AreaOfferConfirmationSerializer(offer_confirmation, context={'request': request})
+
+            response_data = {
+                "offer": offer_serializer.data,
+                "offer_confirmation": confirmation_serializer.data
+            }
+
+            return Response(response_data, status=status.HTTP_200_OK)
+
+        except AreaOfferConfirmation.DoesNotExist:
+            return Response({"error": "Offer confirmation does not exist."}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    @action(detail=True, methods=["patch"], url_path="edit-submitted-offers", permission_classes=[FirebaseIsAuthenticated])
+    def update_submitted_offer(self, request, pk=None):
+
+        try:
+            offer_confirmation = get_object_or_404(AreaOfferConfirmation, identifier=pk)
+
+            if offer_confirmation.confirmed_by != request.user:
+                return Response(
+                    {"error": "You do not have permission to edit this offer confirmation."},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+
+            serializer = AreaOfferConfirmationSerializer(
+                offer_confirmation, data=request.data, partial=True
+            )
+
+            if serializer.is_valid():
+                serializer.save()
+                return Response(
+                    {"message": "Offer confirmation successfully updated."},
+                    status=status.HTTP_200_OK
+                )
+            else:
+                return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        except AreaOfferConfirmation.DoesNotExist:
+            return Response({"error": "Offer confirmation does not exist."}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class AreaOfferDocumentsViewSet(viewsets.ModelViewSet):
