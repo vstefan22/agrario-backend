@@ -13,6 +13,8 @@ from phonenumber_field.modelfields import PhoneNumberField
 from django.db import models
 from django.core.validators import MinValueValidator, MaxValueValidator
 import datetime
+from django.core.exceptions import ObjectDoesNotExist
+from django.apps import apps
 # from django.contrib.gis.db import models as models2
 from django.contrib.auth.models import BaseUserManager
 
@@ -190,16 +192,11 @@ class Landowner(MarketUser):
         verbose_name_plural = "Landowners"
 
 current_year = datetime.datetime.now().year
-current_year = datetime.datetime.now().year
+
 class ProjectDeveloper(MarketUser):
     """
     Model for Project Developers, inheriting from MarketUser.
-
-    Attributes:
-        company_name: Optional name of the developer's company.
-        company_website: Optional website URL of the company.
     """
-    
     interest = models.ForeignKey(
         to="ProjectDeveloperInterest", on_delete=models.CASCADE
     )
@@ -208,7 +205,7 @@ class ProjectDeveloper(MarketUser):
     founding_year = models.PositiveIntegerField(
         validators=[
             MinValueValidator(1500),
-            MaxValueValidator(current_year)
+            MaxValueValidator(datetime.datetime.now().year)
         ],
         blank=True,
         null=True
@@ -224,11 +221,28 @@ class ProjectDeveloper(MarketUser):
         null=True,
     )
     states_active = models.ManyToManyField(to="Region")
-    tier = models.ForeignKey("subscriptions.PlatformSubscription", on_delete=models.CASCADE)
+    tier = models.ForeignKey(
+        "subscriptions.PlatformSubscription",  # Use string reference
+        on_delete=models.CASCADE,
+        null=True,  # Allow null to avoid immediate integrity errors
+        blank=True
+    )
 
     class Meta:
         verbose_name = "Project Developer"
         verbose_name_plural = "Project Developers"
+
+    def save(self, *args, **kwargs):
+        """
+        Dynamically assign the "Free Plan" if the tier is not already set.
+        """
+        if not self.tier_id:
+            PlatformSubscription = apps.get_model("subscriptions", "PlatformSubscription")
+            try:
+                self.tier = PlatformSubscription.objects.get(tier="FREE")
+            except PlatformSubscription.DoesNotExist:
+                raise ValueError("Default subscription plan (Free Plan) does not exist.")
+        super().save(*args, **kwargs)
 
     def upgrade_privileges(self, plan):
         """
@@ -236,7 +250,6 @@ class ProjectDeveloper(MarketUser):
         """
         self.tier = plan
         self.save()
-
 
 class Region(models.Model):
 

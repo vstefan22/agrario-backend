@@ -444,6 +444,14 @@ class ProjectDeveloperSerializer(serializers.ModelSerializer):
         # Remove confirm_password
         validated_data.pop("confirm_password")
 
+        # Assign default subscription plan (Free Plan)
+        if "tier" not in validated_data or not validated_data.get("tier"):
+            from subscriptions.models import PlatformSubscription
+            try:
+                validated_data["tier"] = PlatformSubscription.objects.get(tier="FREE")
+            except PlatformSubscription.DoesNotExist:
+                raise serializers.ValidationError({"tier": "Default subscription plan (Free Plan) does not exist."})
+
         # Create ProjectDeveloper instance
         developer = ProjectDeveloper.objects.create_user(interest=interest, **validated_data)
 

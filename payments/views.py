@@ -46,11 +46,22 @@ class CreateStripePaymentView(APIView):
         """
         Create a Stripe payment session for Analyse Plus or Subscription Upgrade.
         """
-        user = request.user
+        try:
+            # Explicitly fetch the ProjectDeveloper instance
+            user = ProjectDeveloper.objects.get(pk=request.user.pk)
+        except ProjectDeveloper.DoesNotExist:
+            return Response({"error": "Only project developers can perform this action."}, status=403)
+
         parcel_ids = request.data.get("parcel_ids", [])  # List of parcel IDs (for Analyse Plus)
         plan_id = request.data.get("plan_id")  # Plan ID (for subscription upgrade)
         payment_method = request.data.get("payment_method", "card")  # Default to credit card
         currency = request.data.get("currency", "usd")  # Default to USD
+
+        if payment_method == "sofort" and currency != "eur":
+            return Response(
+                {"error": "The 'sofort' payment method only supports EUR currency."},
+                status=400,
+            )
 
         # Determine the payment type: Analyse Plus or Subscription Upgrade
         if plan_id:
@@ -118,6 +129,8 @@ class CreateStripePaymentView(APIView):
         except Exception as e:
             logger.error(f"Unexpected error: {str(e)}", exc_info=True)
             return Response({"error": "An unexpected error occurred. Please try again."}, status=500)
+
+
 
     @staticmethod
     def get_minimum_charge(currency):
