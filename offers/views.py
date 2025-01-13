@@ -13,6 +13,7 @@ from rest_framework.permissions import BasePermission, IsAuthenticated
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
+from .services import get_basket_summary
 from accounts.models import MarketUser
 from payments.models import PaymentTransaction
 from reports.models import Report
@@ -23,6 +24,7 @@ from .models import (
     Landuse,
     Parcel,
     BasketItem,
+    Watchlist
 )
 from .serializers import (
     AreaOfferDocumentsSerializer,
@@ -30,19 +32,12 @@ from .serializers import (
     AuctionPlacementSerializer,
     LanduseSerializer,
     ParcelSerializer,
-    ParcelGeoSerializer
+    ParcelGeoSerializer,
+    WatchlistSerializer
 )
 from accounts.firebase_auth import verify_firebase_token
 
 from django.contrib.gis.db.models.functions import Transform
-
-
-# for p in Parcel.objects.all():
-#     geom = p.polygon
-#     geom.srid = 25832
-#     geom.transform(4326)
-#     p.polygon = geom
-#     p.save()
 
 
 class ParcelGeoViewSet(viewsets.ModelViewSet):
@@ -100,7 +95,6 @@ class ParcelViewSet(viewsets.ModelViewSet):
     queryset = Parcel.objects.all()
     serializer_class = ParcelSerializer
     permission_classes = [FirebaseIsAuthenticated]
-    basket = {}
 
     def perform_create(self, serializer):
         """
@@ -277,89 +271,43 @@ class ParcelViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-    def initialize_basket(request):
-        if "basket" not in request.session:
-            request.session["basket"] = []
-
     @action(detail=True, methods=["post"], permission_classes=[FirebaseIsAuthenticated])
     def add_to_basket(self, request, pk=None):
         """
-        Add a parcel to the basket stored in the session.
+        Add a parcel to the basket stored in the database.
         """
         try:
-            # Ensure the parcel exists
             parcel = self.get_object()
-
-            # Initialize the basket in the session if it doesn't exist
-            if "basket" not in request.session:
-                request.session["basket"] = []
-
-            # Add the parcel ID to the session basket if not already present
-            if parcel.id not in request.session["basket"]:
-                request.session["basket"].append(parcel.id)
-                request.session.modified = True  # Mark the session as modified
-                return Response({"message": "Parcel added to basket."}, status=status.HTTP_200_OK)
-            else:
-                return Response({"message": "Parcel is already in the basket."}, status=status.HTTP_400_BAD_REQUEST)
-        except Parcel.DoesNotExist:
-            return Response({"error": "Parcel not found."}, status=status.HTTP_404_NOT_FOUND)
+            BasketItem.objects.get_or_create(user=request.user, parcel=parcel)
+            return Response({"message": "Parcel added to basket."}, status=status.HTTP_200_OK)
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     @action(detail=True, methods=["post"], permission_classes=[FirebaseIsAuthenticated])
     def remove_from_basket(self, request, pk=None):
         """
-        Remove a parcel from the basket stored in the session.
+        Remove a parcel from the basket stored in the database.
         """
         try:
-            # Ensure the basket exists in the session
-            if "basket" not in request.session or not request.session["basket"]:
-                return Response({"error": "Basket is empty."}, status=status.HTTP_400_BAD_REQUEST)
-
-            # Remove the parcel ID from the basket if it exists
-            if int(pk) in request.session["basket"]:
-                request.session["basket"].remove(int(pk))
-                request.session.modified = True  # Mark the session as modified
-                return Response({"message": "Parcel removed from basket."}, status=status.HTTP_200_OK)
-            else:
+            parcel = self.get_object()
+            basket_item = BasketItem.objects.filter(user=request.user, parcel=parcel).first()
+            if not basket_item:
                 return Response({"error": "Parcel not in basket."}, status=status.HTTP_400_BAD_REQUEST)
+            basket_item.delete()
+            return Response({"message": "Parcel removed from basket."}, status=status.HTTP_200_OK)
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     @action(detail=False, methods=["get"], permission_classes=[FirebaseIsAuthenticated])
     def basket_summary(self, request):
         """
-        Provide an overview of parcels in the basket, including totals and taxes.
+        Provide an overview of parcels in the basket using the basket service.
         """
-        # Check if the basket exists in the session
-        if "basket" not in request.session or not request.session["basket"]:
-            return Response({"message": "Basket is empty."}, status=status.HTTP_200_OK)
-
-        # Fetch parcels from the database based on IDs stored in the session
-        parcel_ids = request.session["basket"]
-        parcels = Parcel.objects.filter(id__in=parcel_ids)
-
-        # Calculate totals
-        total_area = sum(parcel.area_square_meters for parcel in parcels)
-        total_cost = sum(Decimal(parcel.area_square_meters) * Decimal(10)
-                         for parcel in parcels)  # Dynamic pricing
-        tax = total_cost * Decimal("0.2")  # Tax calculation
-        final_total = total_cost + tax
-
-        # Prepare summary
-        summary = {
-            "total_parcels": len(parcels),
-            "total_area": total_area,
-            "total_cost": total_cost,
-            "tax": tax,
-            "final_total": final_total,
-        }
-
-        # Include parcel details in the response
-        parcel_data = [{"id": parcel.id, "state_name": parcel.state_name,
-                        "area": parcel.area_square_meters} for parcel in parcels]
-
-        return Response({"basket": summary, "parcels": parcel_data}, status=status.HTTP_200_OK)
+        try:
+            summary = get_basket_summary(request.user)
+            return Response(summary, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     @action(detail=False, methods=["post"], permission_classes=[FirebaseIsAuthenticated])
     def apply_discount(self, request):
@@ -474,7 +422,7 @@ class ParcelViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["get"], permission_classes=[FirebaseIsAuthenticated])
     def detailed_view(self, request, pk=None):
         """
-        Retrieve detailed parcel data with conditional display based on purchase status.
+        Retrieve detailed parcel data with conditional display based on user role and purchase status.
         """
         try:
             # Get the parcel object
@@ -482,25 +430,42 @@ class ParcelViewSet(viewsets.ModelViewSet):
             user_email = request.user_email
             user = MarketUser.objects.get(email=user_email)
 
-            # Check if the user has purchased the "Analyse Plus" report
+            # Ensure user has the correct role
+            if user.role != "developer":
+                return Response(
+                    {"error": "Only project developers can view detailed parcel data."},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+
+            # Check if the developer has purchased the "Analyse Plus" report for the parcel
             report_purchased = Report.objects.filter(
-                parcel=parcel, visible_for="USER", purchase_type="analyse_plus").exists()
+                identifier=parcel.id, visible_for="USER", purchase_type="analyse_plus"
+            ).exists()
+
+            # Blur fields for developers without the purchased report
+            def blur_field(value):
+                return "*****" if not report_purchased else value
 
             # Prepare the response data
             data = {
                 "id": parcel.id,
                 "state_name": parcel.state_name,
                 "district_name": parcel.district_name,
-                "municipality_name": parcel.municipality_name,
+                "municipality_name": blur_field(parcel.municipality_name),
                 "land_use": parcel.land_use,
                 "area_square_meters": parcel.area_square_meters,
                 "polygon": parcel.polygon.geojson if parcel.polygon else None,
                 "details": {
-                    "stromnetz": "Full Details" if report_purchased else "Blurred",
-                    "solarpark": "Full Details" if report_purchased else "Blurred",
-                    "windenergie": "Full Details" if report_purchased else "Blurred",
-                    "energiespeicher": "Full Details" if report_purchased else "Blurred",
-                    "biodiversität": "Full Details" if report_purchased else "Blurred",
+                    "plz": blur_field(parcel.zipcode),
+                    "gemeinde": blur_field(parcel.municipality_name),
+                    "gemarkung": blur_field(parcel.cadastral_area),
+                    "flur": blur_field(parcel.plot_number_main),
+                    "flurstueck": blur_field(parcel.plot_number_secondary),
+                    "lage_detail": blur_field(parcel.lage_detail) if hasattr(parcel, "lage_detail") else None,
+                    "nutzung_detail": blur_field(parcel.nutzung_detail) if hasattr(parcel, "nutzung_detail") else None,
+                },
+                "accordion_status": {
+                    "lage_nutzung": report_purchased,  # Open if report purchased, else closed
                 },
                 "actions": {
                     "request_offer": True,
@@ -513,10 +478,12 @@ class ParcelViewSet(viewsets.ModelViewSet):
                 data["error"] = "Analyse Plus needs to be purchased to access these details."
 
             return Response(data, status=status.HTTP_200_OK)
+
         except Parcel.DoesNotExist:
             return Response({"error": "Parcel does not exist."}, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
     def get_queryset(self):
         """
@@ -538,6 +505,53 @@ class ParcelViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(area_square_meters__lte=max_area)
 
         return queryset
+    
+    @action(detail=False, methods=["post"], url_path="add-to-watchlist")
+    def add_to_watchlist(self, request):
+        """
+        Add a parcel to the user's watchlist.
+        """
+        parcel_id = request.data.get("parcel_id")
+        if not parcel_id:
+            return Response({"error": "Parcel ID is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            parcel = Parcel.objects.get(id=parcel_id)
+            watchlist_item, created = Watchlist.objects.get_or_create(
+                user=request.user, parcel=parcel
+            )
+            if not created:
+                return Response({"error": "Parcel is already in the watchlist."}, status=status.HTTP_400_BAD_REQUEST)
+
+            serializer = WatchlistSerializer(watchlist_item)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        except Parcel.DoesNotExist:
+            return Response({"error": "Parcel not found."}, status=status.HTTP_404_NOT_FOUND)
+
+    @action(detail=False, methods=["post"], url_path="remove-from-watchlist")
+    def remove_from_watchlist(self, request):
+        """
+        Remove a parcel from the user's watchlist.
+        """
+        parcel_id = request.data.get("parcel_id")
+        if not parcel_id:
+            return Response({"error": "Parcel ID is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            watchlist_item = Watchlist.objects.get(user=request.user, parcel_id=parcel_id)
+            watchlist_item.delete()
+            return Response({"message": "Parcel removed from watchlist."}, status=status.HTTP_200_OK)
+        except Watchlist.DoesNotExist:
+            return Response({"error": "Parcel not in the watchlist."}, status=status.HTTP_404_NOT_FOUND)
+
+    @action(detail=False, methods=["get"], url_path="watchlist")
+    def list_watchlist(self, request):
+        """
+        List all parcels in the user's watchlist.
+        """
+        watchlist_items = Watchlist.objects.filter(user=request.user)
+        serializer = WatchlistSerializer(watchlist_items, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
 
 class ParcelOwnershipPermission(IsAuthenticated):
@@ -554,66 +568,72 @@ class AreaOfferViewSet(viewsets.ModelViewSet):
     queryset = AreaOffer.objects.all()
     serializer_class = AreaOfferSerializer
     permission_classes = [FirebaseIsAuthenticated]
-
     parser_classes = [MultiPartParser, FormParser, JSONParser]
 
     def perform_create(self, serializer):
-        offer = serializer.save()
-        self._handle_uploaded_files(offer)
-        offer.refresh_from_db()
+        """
+        Handle parcel associations and dynamically set the created_by field.
+        """
+        # Save the AreaOffer with the created_by field dynamically set
+        area_offer = serializer.save(created_by=self.request.user)
 
-    def perform_update(self, serializer):
-        offer = serializer.save()
-        self._handle_uploaded_files(offer)
+        # Associate parcels if parcel_ids are provided
+        parcel_ids = self.request.data.get("parcel_ids", [])
+        if parcel_ids:
+            parcels = Parcel.objects.filter(id__in=parcel_ids, appear_in_offer__isnull=True)
+            for parcel in parcels:
+                parcel.appear_in_offer = area_offer
+                parcel.save()  # Explicitly save each parcel
 
-        offer.refresh_from_db()
+        # Refresh the instance to include updated reverse relationships
+        area_offer.refresh_from_db()
 
-    @action(detail=True, methods=["post"], permission_classes=[IsAuthenticated])
-    def prepare_offer(self, request, pk=None):
-        offer = self.get_object()
-        serializer = self.get_serializer(
-            offer, data=request.data, partial=True)
-        if serializer.is_valid():
-            offer = serializer.save()
-            self._handle_uploaded_files(offer)
-            return Response(serializer.data, status=status.HTTP_200_OK)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        # Handle uploaded documents
+        self._handle_uploaded_files(area_offer)
 
-    @action(detail=True, methods=["post"])
-    def deactivate(self, request, pk=None):
-        offer = self.get_object()
-        if offer.created_by != request.user:
-            return Response(
-                {"error": "You are not allowed to deactivate this offer."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
-        offer.status = AreaOffer.OfferStatus.INACTIVE
-        offer.save()
-        return Response({"message": "Offer deactivated successfully."}, status=status.HTTP_200_OK)
+    def perform_create(self, serializer):
+        """
+        Handle parcel associations and dynamically set the created_by field.
+        """
+        # Save the AreaOffer with the created_by field dynamically set
+        area_offer = serializer.save(created_by=self.request.user)
+
+        # Associate parcels if parcel_ids are provided
+        parcel_ids = self.request.data.get("parcel_ids", [])
+        print("parcel_ids         ======>       ",parcel_ids)
+        if parcel_ids:
+            parcels = Parcel.objects.filter(id__in=parcel_ids, appear_in_offer__isnull=True)
+            print("parcels", parcels)
+            for parcel in parcels:
+                print("for parcel in parcels: ", parcel)
+                parcel.appear_in_offer = area_offer
+                print("parcel", parcel)
+                print("appear_in_offer", parcel.appear_in_offer)
+                parcel.save()  # Save each parcel explicitly to update the relationship
+
+        # Refresh the instance to include updated reverse relationships
+        area_offer = AreaOffer.objects.prefetch_related("parcels").get(pk=area_offer.pk)
+        print("area_offer", area_offer)
+
+        # Handle uploaded documents
+        self._handle_uploaded_files(area_offer)
 
     def get_queryset(self):
+        """
+        Include parcels in the queryset to ensure the relationship is fetched.
+        """
         queryset = super().get_queryset()
-        user_email = self.request.user_email
-        if user_email:
-            queryset = queryset.filter(created_by__email=user_email)
-        return queryset
-
-    def list(self, request, *args, **kwargs):
-        queryset = self.filter_queryset(self.get_queryset())
-        if not queryset.exists():
-            return Response({"message": "No offers found."}, status=status.HTTP_200_OK)
-        page = self.paginate_queryset(queryset)
-        if page is not None:
-            serializer = self.get_serializer(page, many=True)
-            return self.get_paginated_response(serializer.data)
-        serializer = self.get_serializer(queryset, many=True)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        print("queryset", queryset)
+        return queryset.prefetch_related("parcels")
 
     def _handle_uploaded_files(self, offer):
-
+        """
+        Handles uploaded files for an AreaOffer.
+        """
         files = self.request.FILES.getlist('documents')
         for file in files:
             AreaOfferDocuments.objects.create(offer=offer, document=file)
+
 
 class AreaOfferDocumentsViewSet(viewsets.ModelViewSet):
     """

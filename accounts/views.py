@@ -3,7 +3,8 @@
 Includes views for user registration, login, email confirmation, and role-based dashboards.
 """
 
-import logging, requests
+import logging
+import requests
 from django.conf import settings
 from django.contrib.auth.tokens import default_token_generator
 from django.core.mail import send_mail
@@ -42,6 +43,7 @@ from .utils import get_user_role
 
 logger = logging.getLogger(__name__)
 
+
 class MarketUserViewSet(viewsets.ModelViewSet):
     """
     ViewSet for managing MarketUser instances.
@@ -56,21 +58,12 @@ class MarketUserViewSet(viewsets.ModelViewSet):
             return [AllowAny()]
         return [IsAuthenticated()]
 
-    @swagger_auto_schema(
-        tags=["User Management"],
-        operation_summary="Register a new user",
-        operation_description="Create a new user by providing username, email, password, and role.",
-        request_body=UserRegistrationSerializer,
-        responses={
-            201: openapi.Response("User registered successfully"),
-            400: "Validation error",
-        },
-    )
     def create(self, request, *args, **kwargs):
         """
         Handles user registration, Firebase user creation, and email confirmation.
         """
         role = request.data.get("role")
+
 
         if role == "landowner":
             serializer_class = LandownerSerializer
@@ -146,7 +139,7 @@ class MarketUserViewSet(viewsets.ModelViewSet):
     )
     def confirm_email(self, request, uidb64, token):
         """
-        Confirms the user's email address.
+        Confirms the user's email address and redirects to the frontend login page.
         """
         try:
             uid = urlsafe_base64_decode(uidb64).decode()
@@ -160,23 +153,24 @@ class MarketUserViewSet(viewsets.ModelViewSet):
         if default_token_generator.check_token(user, token):
             if user.is_email_confirmed:
                 return Response(
-                    {"message": "Your email is already confirmed. You can log in now."},
+                    {"message": "Your email is already confirmed. Redirecting to the login page."},
                     status=status.HTTP_200_OK,
+                    headers={"Location": f"{settings.FRONTEND_URL}/login"}
                 )
             user.is_email_confirmed = True
             user.is_active = True
-            user.privacy_accepted = True
-            user.terms_accepted = True
             user.save()
             return Response(
-                {"message": "Your account has been confirmed successfully. You can log in now."},
+                {"message": "Your account has been confirmed successfully. Redirecting to the login page."},
                 status=status.HTTP_200_OK,
+                headers={"Location": f"{settings.FRONTEND_URL}/login"}
             )
 
         return Response(
             {"error": "Invalid or expired confirmation link."},
             status=status.HTTP_400_BAD_REQUEST,
         )
+
 
 
 class LoginView(APIView):
@@ -196,9 +190,11 @@ class LoginView(APIView):
             properties={
                 "email": openapi.Schema(
                     type=openapi.TYPE_STRING,
+                    type=openapi.TYPE_STRING,
                     description="The email address of the user"
                 ),
                 "password": openapi.Schema(
+                    type=openapi.TYPE_STRING,
                     type=openapi.TYPE_STRING,
                     description="The password of the user"
                 ),
@@ -356,63 +352,6 @@ class LoginView(APIView):
         data = response.json()
         return data["idToken"]
 
-    def verify_firebase_password(self, email, password):
-        """
-        Verifies the provided email and password using Firebase's REST API.
-
-        Args:
-            email (str): The user's email address.
-            password (str): The user's password.
-
-        Returns:
-            str: A Firebase ID token if authentication is successful.
-
-        Raises:
-            AuthenticationFailed: If the email or password is incorrect.
-        """
-        firebase_api_key = settings.FIREBASE_API_KEY
-        url = f"https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key={firebase_api_key}"
-        payload = {
-            "email": email,
-            "password": password,
-            "returnSecureToken": True,
-        }
-
-        response = requests.post(url, json=payload)
-        if response.status_code != 200:
-            raise AuthenticationFailed("Invalid email or password.")
-
-        data = response.json()
-        return data["idToken"]
-
-    def verify_firebase_password(self, email, password):
-        """
-        Verifies the provided email and password using Firebase's REST API.
-
-        Args:
-            email (str): The user's email address.
-            password (str): The user's password.
-
-        Returns:
-            str: A Firebase ID token if authentication is successful.
-
-        Raises:
-            AuthenticationFailed: If the email or password is incorrect.
-        """
-        firebase_api_key = settings.FIREBASE_API_KEY
-        url = f"https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key={firebase_api_key}"
-        payload = {
-            "email": email,
-            "password": password,
-            "returnSecureToken": True,
-        }
-
-        response = requests.post(url, json=payload)
-        if response.status_code != 200:
-            raise AuthenticationFailed("Invalid email or password.")
-
-        data = response.json()
-        return data["idToken"]
 
 class RoleDashboardView(APIView):
     """
@@ -654,6 +593,7 @@ class MarketUserProfileView(viewsets.ViewSet):
         user = self.get_authenticated_user(request)
         if isinstance(user, Response):
             return user
+
 
         if user.role == "landowner":
             try:

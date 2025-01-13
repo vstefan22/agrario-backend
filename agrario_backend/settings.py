@@ -31,9 +31,14 @@ SECRET_KEY = os.getenv('SECRET_KEY')
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv("DEBUG", "False").lower() == "true"
 
+DEBUG = os.getenv("DEBUG", "False").lower() == "true"
+
 FRONTEND_URL = os.getenv('FRONTEND_URL')
 BACKEND_URL = os.getenv('BACKEND_URL')
 STRIPE_SECRET_KEY = os.getenv('STRIPE_SECRET_KEY')
+STRIPE_SUCCESS_URL = "https://your-backend-url/api/payments/success/"
+STRIPE_CANCEL_URL = "https://your-backend-url/api/payments/cancel/"
+
 
 ANALYSE_PLUS_RATE = 2
 
@@ -55,6 +60,27 @@ CORS_ALLOWED_ORIGINS = [
     'https://agrario-frontend-woad.vercel.app'
 ]
 CORS_ALLOW_CREDENTIALS = True
+
+CORS_ALLOW_HEADERS = [
+    'accept',
+    'accept-encoding',
+    'authorization',
+    'content-type',
+    'dnt',
+    'origin',
+    'user-agent',
+    'x-csrftoken',
+    'x-requested-with',
+]
+
+CORS_ALLOW_METHODS = (
+    "DELETE",
+    "GET",
+    "OPTIONS",
+    "PATCH",
+    "POST",
+    "PUT",
+)
 
 CORS_ALLOW_HEADERS = [
     'accept',
@@ -108,7 +134,6 @@ INSTALLED_APPS = [
     'rest_framework.authtoken',
     'drf_yasg',
     'django_filters',
-    "rest_framework_gis",
 
     # custom apps
     'accounts',
@@ -117,10 +142,11 @@ INSTALLED_APPS = [
     'subscriptions',
     'reports',
     'messaging',
-    'invites',
+    'invites', 
 ]
 
 MIDDLEWARE = [
+    "corsheaders.middleware.CorsMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
@@ -133,6 +159,7 @@ MIDDLEWARE = [
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
+        'accounts.firebase_auth.FirebaseAuthentication',
         'accounts.firebase_auth.FirebaseAuthentication',
         'rest_framework.authentication.TokenAuthentication',
     ],
@@ -186,6 +213,7 @@ else:
     }
 AUTH_USER_MODEL = 'accounts.MarketUser'
 # Load Firebase credentials
+# Load Firebase credentials
 firebase_credentials_path = os.getenv("FIREBASE_CREDENTIALS_JSON_PATH")
 firebase_credentials_base64 = os.getenv("FIREBASE_CREDENTIALS_BASE64")
 
@@ -195,8 +223,7 @@ if firebase_credentials_path and os.path.exists(firebase_credentials_path):
     with open(firebase_credentials_path, "r") as f:
         firebase_config = json.load(f)
 elif firebase_credentials_base64:
-    firebase_config = json.loads(base64.b64decode(
-        firebase_credentials_base64).decode("utf-8"))
+    firebase_config = json.loads(base64.b64decode(firebase_credentials_base64).decode("utf-8"))
 else:
     firebase_config = None  # Default to None to handle missing credentials
 

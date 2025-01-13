@@ -49,7 +49,7 @@ class Parcel(models.Model):
         district_name: Name of the district where the parcel is located.
         municipality_name: Name of the municipality.
         cadastral_area: Cadastral area of the parcel.
-        cadastral_sector: Cadastral sector of the parcel.
+        cadastral_parcel: Cadastral sector of the parcel.
         plot_number_main: Main plot number.
         plot_number_secondary: Secondary plot number.
         land_use: Description of land usage.
@@ -252,3 +252,17 @@ class Region(models.Model):
     )
 
     geom = gis_models.MultiPolygonField(null=True, blank=True)
+
+
+class Watchlist(models.Model):
+    """
+    Represents a user's watchlist for parcels.
+    """
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="watchlist"
+    )
+    parcel = models.ForeignKey(Parcel, on_delete=models.CASCADE, related_name="watched_by")
+    added_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ("user", "parcel")

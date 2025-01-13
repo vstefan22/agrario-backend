@@ -15,6 +15,7 @@ from .models import (
     AreaOfferDocuments,
     Landuse,
     Parcel,
+    Watchlist
 )
 from reports.models import Report
 import logging
@@ -39,6 +40,7 @@ class ParcelGeoSerializer(GeoFeatureModelSerializer):
                   'municipality_name', 'cadastral_area', 'area_square_meters', 'cadastral_parcel', 'zipcode', 'communal_district')
         geo_field = 'polygon'
 
+logger=logging.getLogger(__name__)
 
 class LanduseSerializer(serializers.ModelSerializer):
     """
@@ -58,6 +60,7 @@ class ParcelSerializer(serializers.ModelSerializer):
 
     # `polygon` is read-only in API, so DRF won't try to parse it as geometry
     polygon = serializers.SerializerMethodField(read_only=True)
+    # id = serializers.UUIDField(source='identifier')
 
     # We'll expect an array of objects like [{ lat: 51.8, lng: 7.46 }, ... ]
     # on POST/PUT requests
@@ -179,6 +182,77 @@ class ParcelSerializer(serializers.ModelSerializer):
                 })
 
         return super().update(instance, validated_data)
+    
+class ParcelListSerializer(serializers.ModelSerializer):
+    """
+    Serializer for listing parcels with limited fields.
+    """
+    id = serializers.UUIDField(source='identifier')
+    class Meta:
+        model = Parcel
+        fields = ["id", "state_name", "land_use", "area_square_meters", "polygon"]
+        read_only_fields = ["id", "area_square_meters"]
+
+class WatchlistSerializer(serializers.ModelSerializer):
+    """
+    Serializer for user's watchlist.
+    """
+    parcel_details = ParcelListSerializer(source="parcel", read_only=True)
+
+    class Meta:
+        model = Watchlist
+        fields = ["id", "parcel", "parcel_details", "added_at"]
+        read_only_fields = ["added_at"]
+
+class ParcelDetailsSerializer(serializers.ModelSerializer):
+    """
+    Serializer for detailed parcel view with field blurring based on restrictions.
+    """
+
+    blurred_fields = ["plz", "gemeinde", "gemarkung", "flur", "flurstueck"]
+    id = serializers.UUIDField(source='identifier')
+
+    def to_representation(self, instance):
+        """
+        Blur specific fields and restrict data for sensitive sections.
+        """
+        data = super().to_representation(instance)
+
+        # Blur specific fields in the table
+        for field in self.blurred_fields:
+            if field in data:
+                data[field] = "*****"
+
+        # Blur fields under "Lage und Nutzung" accordion
+        accordion_fields = ["lage_detail", "nutzung_detail"]  # Replace with actual fields
+        for field in accordion_fields:
+            if field in data:
+                data[field] = "*****"
+
+        return data
+
+    class Meta:
+        model = Parcel
+        fields = [
+            "id",
+            "state_name",
+            "district_name",
+            "municipality_name",
+            "cadastral_area",
+            "cadastral_parcel",
+            "plot_number_main",
+            "plot_number_secondary",
+            "land_use",
+            "area_square_meters",
+            "polygon",
+            "plz",
+            "gemeinde",
+            "gemarkung",
+            "flur",
+            "flurstueck",
+            "lage_detail",  # Example field under "Lage und Nutzung"
+            "nutzung_detail",  # Example field under "Lage und Nutzung"
+        ]
 
 
 class AreaOfferDocumentsSerializer(serializers.ModelSerializer):
@@ -206,6 +280,8 @@ class AreaOfferSerializer(serializers.ModelSerializer):
     shareholder_model_display = serializers.CharField(
         source="get_shareholder_model_display", read_only=True)
 
+    parcels = ParcelSerializer(many=True, read_only=True)
+
     documented_offers = AreaOfferDocumentsSerializer(many=True, read_only=True)
 
     class Meta:
@@ -225,14 +301,16 @@ class AreaOfferSerializer(serializers.ModelSerializer):
             "shareholder_model",
             "shareholder_model_display",
             "important_remarks",
-            "documented_offers"
+            "documented_offers",
+            "parcels",
         ]
         extra_kwargs = {"created_by": {"read_only": True}}
 
     def create(self, validated_data):
-        request = self.context.get('request')
-        user = request.user if request else None
-        return AreaOffer.objects.create(created_by=user, **validated_data)
+        """
+        Ensure the `created_by` field is set dynamically in the ViewSet, not here.
+        """
+        return super().create(validated_data)
 
     def validate_criteria(self, value):
         if not isinstance(value, dict):
