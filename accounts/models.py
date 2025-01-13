@@ -157,10 +157,18 @@ class ProjectDeveloper(MarketUser):
         null=True,
     )
     states_active = models.ManyToManyField(to="Region")
+    tier = models.ForeignKey("subscriptions.PlatformSubscription", on_delete=models.CASCADE)
 
     class Meta:
         verbose_name = "Project Developer"
         verbose_name_plural = "Project Developers"
+
+    def upgrade_privileges(self, plan):
+        """
+        Updates the user's privileges based on the selected subscription plan.
+        """
+        self.tier = plan
+        self.save()
 
 
 class Region(models.Model):
