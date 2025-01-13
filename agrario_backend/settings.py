@@ -36,6 +36,8 @@ DEBUG = os.getenv("DEBUG", "False").lower() == "true"
 FRONTEND_URL = os.getenv('FRONTEND_URL')
 BACKEND_URL = os.getenv('BACKEND_URL')
 STRIPE_SECRET_KEY = os.getenv('STRIPE_SECRET_KEY')
+STRIPE_SUCCESS_URL = "https://your-backend-url/api/payments/success/"
+STRIPE_CANCEL_URL = "https://your-backend-url/api/payments/cancel/"
 
 ANALYSE_PLUS_RATE = 2
 

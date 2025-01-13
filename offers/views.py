@@ -13,6 +13,7 @@ from rest_framework.permissions import BasePermission, IsAuthenticated
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
+from .services import get_basket_summary
 from accounts.models import MarketUser
 from payments.models import PaymentTransaction
 from reports.models import Report
@@ -94,7 +95,6 @@ class ParcelViewSet(viewsets.ModelViewSet):
     queryset = Parcel.objects.all()
     serializer_class = ParcelSerializer
     permission_classes = [FirebaseIsAuthenticated]
-    basket = {}
 
     def perform_create(self, serializer):
         """
@@ -271,89 +271,43 @@ class ParcelViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-    def initialize_basket(request):
-        if "basket" not in request.session:
-            request.session["basket"] = []
-
     @action(detail=True, methods=["post"], permission_classes=[FirebaseIsAuthenticated])
     def add_to_basket(self, request, pk=None):
         """
-        Add a parcel to the basket stored in the session.
+        Add a parcel to the basket stored in the database.
         """
         try:
-            # Ensure the parcel exists
             parcel = self.get_object()
-
-            # Initialize the basket in the session if it doesn't exist
-            if "basket" not in request.session:
-                request.session["basket"] = []
-
-            # Add the parcel ID to the session basket if not already present
-            if parcel.id not in request.session["basket"]:
-                request.session["basket"].append(parcel.id)
-                request.session.modified = True  # Mark the session as modified
-                return Response({"message": "Parcel added to basket."}, status=status.HTTP_200_OK)
-            else:
-                return Response({"message": "Parcel is already in the basket."}, status=status.HTTP_400_BAD_REQUEST)
-        except Parcel.DoesNotExist:
-            return Response({"error": "Parcel not found."}, status=status.HTTP_404_NOT_FOUND)
+            BasketItem.objects.get_or_create(user=request.user, parcel=parcel)
+            return Response({"message": "Parcel added to basket."}, status=status.HTTP_200_OK)
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     @action(detail=True, methods=["post"], permission_classes=[FirebaseIsAuthenticated])
     def remove_from_basket(self, request, pk=None):
         """
-        Remove a parcel from the basket stored in the session.
+        Remove a parcel from the basket stored in the database.
         """
         try:
-            # Ensure the basket exists in the session
-            if "basket" not in request.session or not request.session["basket"]:
-                return Response({"error": "Basket is empty."}, status=status.HTTP_400_BAD_REQUEST)
-
-            # Remove the parcel ID from the basket if it exists
-            if int(pk) in request.session["basket"]:
-                request.session["basket"].remove(int(pk))
-                request.session.modified = True  # Mark the session as modified
-                return Response({"message": "Parcel removed from basket."}, status=status.HTTP_200_OK)
-            else:
+            parcel = self.get_object()
+            basket_item = BasketItem.objects.filter(user=request.user, parcel=parcel).first()
+            if not basket_item:
                 return Response({"error": "Parcel not in basket."}, status=status.HTTP_400_BAD_REQUEST)
+            basket_item.delete()
+            return Response({"message": "Parcel removed from basket."}, status=status.HTTP_200_OK)
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     @action(detail=False, methods=["get"], permission_classes=[FirebaseIsAuthenticated])
     def basket_summary(self, request):
         """
-        Provide an overview of parcels in the basket, including totals and taxes.
+        Provide an overview of parcels in the basket using the basket service.
         """
-        # Check if the basket exists in the session
-        if "basket" not in request.session or not request.session["basket"]:
-            return Response({"message": "Basket is empty."}, status=status.HTTP_200_OK)
-
-        # Fetch parcels from the database based on IDs stored in the session
-        parcel_ids = request.session["basket"]
-        parcels = Parcel.objects.filter(id__in=parcel_ids)
-
-        # Calculate totals
-        total_area = sum(parcel.area_square_meters for parcel in parcels)
-        total_cost = sum(Decimal(parcel.area_square_meters) * Decimal(10)
-                         for parcel in parcels)  # Dynamic pricing
-        tax = total_cost * Decimal("0.2")  # Tax calculation
-        final_total = total_cost + tax
-
-        # Prepare summary
-        summary = {
-            "total_parcels": len(parcels),
-            "total_area": total_area,
-            "total_cost": total_cost,
-            "tax": tax,
-            "final_total": final_total,
-        }
-
-        # Include parcel details in the response
-        parcel_data = [{"id": parcel.id, "state_name": parcel.state_name,
-                        "area": parcel.area_square_meters} for parcel in parcels]
-
-        return Response({"basket": summary, "parcels": parcel_data}, status=status.HTTP_200_OK)
+        try:
+            summary = get_basket_summary(request.user)
+            return Response(summary, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     @action(detail=False, methods=["post"], permission_classes=[FirebaseIsAuthenticated])
     def apply_discount(self, request):

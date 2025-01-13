@@ -3,7 +3,7 @@ from django.conf import settings
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, BasePermission
-from rest_framework.exceptions import PermissionDenied
+from rest_framework.exceptions import PermissionDenied, ValidationError
 from .models import PaymentTransaction
 from accounts.firebase_auth import verify_firebase_token
 from .serializers import PaymentTransactionSerializer
@@ -12,6 +12,7 @@ from reports.models import Report
 from accounts.models import ProjectDeveloper
 from subscriptions.models import PlatformSubscription, ProjectDeveloperSubscription
 from django.utils import timezone
+from offers.services import get_basket_summary
 
 import logging
 
@@ -145,48 +146,92 @@ class CreateStripePaymentView(APIView):
         }
         return minimum_amounts.get(currency.lower(), None)
 
-class StripeSubscriptionWebhookView(APIView):
-    permission_classes = []
+class StripeSessionView(APIView):
+    permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        payload = request.body
-        sig_header = request.META.get("HTTP_STRIPE_SIGNATURE")
-        endpoint_secret = settings.STRIPE_ENDPOINT_SECRET
+        user = request.user
+        payment_type = request.data.get("payment_type")
+        success_url = request.data.get("success_url", settings.STRIPE_SUCCESS_URL)
+        cancel_url = request.data.get("cancel_url", settings.STRIPE_CANCEL_URL)
+        
+        if payment_type not in ["report", "subscription"]:
+            raise ValidationError("Invalid payment type.")
 
         try:
-            event = stripe.Webhook.construct_event(payload, sig_header, endpoint_secret)
-        except (ValueError, stripe.error.SignatureVerificationError) as e:
-            return Response({"error": str(e)}, status=400)
+            if payment_type == "report":
+                basket_summary = get_basket_summary(user)
+                if not basket_summary["parcel_ids"]:
+                    raise ValidationError("Basket is empty.")
+                
+                amount = basket_summary["total_cost"]
+                metadata = {"parcel_ids": ",".join(map(str, basket_summary["parcel_ids"]))}
 
-        if event["type"] == "payment_intent.succeeded":
-            intent = event["data"]["object"]
-            metadata = intent.get("metadata", {})
-            user_id = metadata.get("user_id")
-            plan_id = metadata.get("plan_id")
+            elif payment_type == "subscription":
+                plan_id = request.data.get("plan_id")
+                if not plan_id:
+                    raise ValidationError("Plan ID is required for subscription.")
+                plan = PlatformSubscription.objects.get(id=plan_id)
+                amount = plan.amount_paid_per_month
+                metadata = {"plan_id": str(plan_id)}
+            else:
+                raise ValidationError("Unsupported payment type.")
 
-            # Update subscription
-            user = ProjectDeveloper.objects.get(id=user_id)
-            plan = PlatformSubscription.objects.get(id=plan_id)
-            ProjectDeveloperSubscription.objects.create(
-                by_user=user,
-                tier=plan,
-                valid_from=timezone.now(),
+            # Create Stripe Session
+            session = stripe.checkout.Session.create(
+                payment_method_types=["card"],
+                mode="payment",
+                line_items=[
+                    {
+                        "price_data": {
+                            "currency": "usd",
+                            "product_data": {
+                                "name": "Purchase for {}".format(payment_type),
+                            },
+                            "unit_amount": int(amount * 100),
+                        },
+                        "quantity": 1,
+                    },
+                ],
+                metadata=metadata,
+                success_url=success_url,
+                cancel_url=cancel_url,
             )
 
-            try:
-                user = ProjectDeveloper.objects.get(id=user_id)
-                plan = PlatformSubscription.objects.get(id=plan_id)
+            # Record Transaction
+            PaymentTransaction.objects.create(
+                user=user,
+                amount=amount,
+                currency="USD",
+                stripe_payment_intent=session.id,
+                status="pending",
+            )
 
-                # Upgrade user privileges
-                user.upgrade_privileges(plan)
+            return Response({"session_url": session.url, "payment_intent": session.id}, status=200)
 
-                # Log success
-                logger.info(f"User {user.email} upgraded to plan {plan.title}")
-            except Exception as e:
-                logger.error(f"Error upgrading privileges: {e}", exc_info=True)
+        except stripe.error.StripeError as e:
+            logger.error(f"Stripe error: {e.user_message}")
+            return Response({"error": e.user_message}, status=400)
+        except Exception as e:
+            logger.error(f"Unexpected error: {str(e)}")
+            return Response({"error": str(e)}, status=500)
+        
+from rest_framework.views import APIView
+from rest_framework.response import Response
 
-        elif event["type"] == "payment_intent.payment_failed":
-            intent = event["data"]["object"]
-            logger.error(f"Payment failed for intent: {intent['id']}")
+class StripeSuccessView(APIView):
+    """
+    Handle Stripe payment success.
+    """
+    def get(self, request):
+        # You can redirect to a frontend or display a success message here
+        return Response({"message": "Payment was successful. Thank you!"}, status=200)
 
-        return Response({"status": "success"})
+
+class StripeCancelView(APIView):
+    """
+    Handle Stripe payment cancellation.
+    """
+    def get(self, request):
+        # You can redirect to a frontend or display a cancellation message here
+        return Response({"message": "Payment was cancelled. Please try again."}, status=200)

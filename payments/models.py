@@ -4,9 +4,6 @@ import uuid
 from django.utils import timezone
 
 class PaymentTransaction(models.Model):
-    """
-    Model to store payment transactions.
-    """
     identifier = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     amount = models.DecimalField(max_digits=10, decimal_places=2)
