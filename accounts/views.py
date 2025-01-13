@@ -105,7 +105,7 @@ class MarketUserViewSet(viewsets.ModelViewSet):
         confirmation_link = f"{settings.BACKEND_URL}/api/accounts/users/confirm-email/{uid}/{token}/"
         send_mail(
             subject="Confirm Your Email Address",
-            message=f"Hi {user.firstname},\n\nClick the link below to confirm your email:\n{confirmation_link}",
+            message=f"Hi {user.first_name},\n\nClick the link below to confirm your email:\n{confirmation_link}",
             from_email=settings.EMAIL_HOST_USER,
             recipient_list=[user.email],
         )
@@ -190,11 +190,9 @@ class LoginView(APIView):
             properties={
                 "email": openapi.Schema(
                     type=openapi.TYPE_STRING,
-                    type=openapi.TYPE_STRING,
                     description="The email address of the user"
                 ),
                 "password": openapi.Schema(
-                    type=openapi.TYPE_STRING,
                     type=openapi.TYPE_STRING,
                     description="The password of the user"
                 ),
@@ -513,7 +511,7 @@ class RoleDashboardView(APIView):
         else:
             role_data = {}
 
-        dashboard_greeting = f"Welcome {role.capitalize()} {user.firstname or email.split('@')[0]}!"
+        dashboard_greeting = f"Welcome {role.capitalize()} {user.first_name or email.split('@')[0]}!"
         dashboard_data = {
             "dashboard_greeting": dashboard_greeting,
             "tutorial_links": tutorial_links,

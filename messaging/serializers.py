@@ -25,7 +25,7 @@ class SenderSerializer(serializers.ModelSerializer):
     """
     class Meta:
         model = MarketUser
-        fields = ['id', 'username', 'email']
+        fields = ['id', 'email']
 
 
 class MessageSerializer(serializers.ModelSerializer):

@@ -38,8 +38,8 @@ class UserSerializer(serializers.ModelSerializer):
         model = MarketUser
         fields = [
             "id",
-            "firstname",
-            "lastname",
+            "first_name",
+            "last_name",
             "email",
             "phone_number",
             "address",
@@ -100,8 +100,8 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
     class Meta:
         model = MarketUser
         fields = [
-            "firstname",
-            "lastname",
+            "first_name",
+            "last_name",
             "email",
             "password",
             "confirm_password",
@@ -158,8 +158,8 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
         role = validated_data.pop("role", "landowner")
         user = MarketUser.objects.create_user(
             email=validated_data["email"],
-            firstname=validated_data["firstname"],
-            lastname=validated_data["lastname"],
+            first_name=validated_data["first_name"],
+            last_name=validated_data["last_name"],
             password=validated_data["password"],
             role=role,
             phone_number=validated_data.get("phone_number"),
@@ -183,7 +183,7 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
 
         send_mail(
             subject="Confirm Your Email Address",
-            message=f"Hi {user.firstname},\n\nClick the link below to confirm your email:\n{confirmation_link}",
+            message=f"Hi {user.first_name},\n\nClick the link below to confirm your email:\n{confirmation_link}",
             from_email=settings.EMAIL_HOST_USER,
             recipient_list=[user.email],
         )
@@ -249,7 +249,7 @@ class LandownerDashboardSerializer(serializers.ModelSerializer):
     class Meta:
         model = Landowner
         fields = [
-            "firstname",        # For personalized greeting
+            "first_name",        # For personalized greeting
             "tutorial_links",   # List of tutorial video URLs
             "notifications",    # Notifications and unread message counts
             "statistics",       # Parcel statistics
@@ -329,8 +329,8 @@ class LandownerSerializer(serializers.ModelSerializer):
         model = Landowner
         fields = [
             "id",
-            "firstname",
-            "lastname",
+            "first_name",
+            "last_name",
             "email",
             "phone_number",
             "address",
@@ -394,8 +394,8 @@ class ProjectDeveloperSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "profile_picture",
-            "firstname",
-            "lastname",
+            "first_name",
+            "last_name",
             "email",
             "phone_number",
             "address",
@@ -486,7 +486,7 @@ class DeveloperDashboardSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = ProjectDeveloper
-        fields = ["id", "username", "email", "watchlist", "auctions"]
+        fields = ["id", "email", "watchlist", "auctions"]
 
     def get_watchlist(self, obj):
         """

@@ -81,8 +81,6 @@ class AreaOfferConfirmationAdmin(admin.ModelAdmin):
     """
 
     list_display = ("id", "offer", "confirmed_by", "confirmed_at")
-    search_fields = ("offer__parcel__owner__username", "confirmed_by__username")
-
 
 @admin.register(AreaOfferAdministration)
 class AreaOfferAdministrationAdmin(admin.ModelAdmin):
@@ -91,4 +89,3 @@ class AreaOfferAdministrationAdmin(admin.ModelAdmin):
     """
 
     list_display = ("id", "offer", "notes", "created_at")
-    search_fields = ("offer__parcel__owner__username", "notes")

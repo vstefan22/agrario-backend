@@ -18,37 +18,6 @@ from django.apps import apps
 # from django.contrib.gis.db import models as models2
 from django.contrib.auth.models import BaseUserManager
 
-
-class MarketUserManager(BaseUserManager):
-    """
-    Custom manager for MarketUser without a username field.
-    """
-
-    def create_user(self, email, password=None, **extra_fields):
-        if not email:
-            raise ValueError("The Email field must be set")
-        email = self.normalize_email(email)
-        user = self.model(email=email, **extra_fields)
-        user.set_password(password)
-        user.save(using=self._db)
-        return user
-
-    def create_superuser(self, email, password=None, **extra_fields):
-        extra_fields.setdefault('is_staff', True)
-        extra_fields.setdefault('is_superuser', True)
-
-        if extra_fields.get('is_staff') is not True:
-            raise ValueError("Superuser must have is_staff=True.")
-        if extra_fields.get('is_superuser') is not True:
-            raise ValueError("Superuser must have is_superuser=True.")
-
-        return self.create_user(email, password, **extra_fields)
-from django.core.validators import MinValueValidator, MaxValueValidator
-import datetime
-# from django.contrib.gis.db import models as models2
-from django.contrib.auth.models import BaseUserManager
-
-
 class MarketUserManager(BaseUserManager):
     """
     Custom manager for MarketUser without a username field.
@@ -100,19 +69,9 @@ class MarketUser(AbstractUser):
         default=uuid.uuid4,
         editable=False
     )
-    username = None
-    identifier = models.UUIDField(
-        primary_key=True,
-        default=uuid.uuid4,
-        editable=False
-    )
     email = models.EmailField(unique=True)
-    firstname = models.CharField(max_length=255)
-    lastname = models.CharField(max_length=255)
-    phone_number = PhoneNumberField(
-        region="DE", max_length=20, blank=True, null=True)
-    firstname = models.CharField(max_length=255)
-    lastname = models.CharField(max_length=255)
+    first_name = models.CharField(max_length=255)
+    last_name = models.CharField(max_length=255)
     phone_number = PhoneNumberField(
         region="DE", max_length=20, blank=True, null=True)
     address = models.CharField(max_length=255, null=True, blank=True)
@@ -123,16 +82,7 @@ class MarketUser(AbstractUser):
         upload_to="profile_pictures/", blank=True)
     city = models.CharField(max_length=50, null=True)
     zipcode = models.CharField(max_length=5)
-    company_name = models.CharField(max_length=255, null=True, blank=True)
-    company_website = models.URLField(null=True, blank=True)
-    position = models.CharField(max_length=100, null=True, blank=True)
-    profile_picture = models.FileField(
-        upload_to="profile_pictures/", blank=True)
-    city = models.CharField(max_length=50, null=True)
-    zipcode = models.CharField(max_length=5)
     is_email_confirmed = models.BooleanField(default=False)
-    role = models.CharField(
-        max_length=20, choices=ROLE_CHOICES)
     role = models.CharField(
         max_length=20, choices=ROLE_CHOICES)
     reset_code = models.CharField(max_length=6, null=True, blank=True)
@@ -142,19 +92,14 @@ class MarketUser(AbstractUser):
     privacy_accepted = models.BooleanField(default=False)
     terms_accepted = models.BooleanField(default=False)
 
-    USERNAME_FIELD = "email"
-    REQUIRED_FIELDS = ['firstname', 'lastname', 'company_name',
-                       'address', 'zipcode', 'city', 'phone_number']
+    USERNAME_FIELD = 'email'
 
     objects = MarketUserManager()
-    REQUIRED_FIELDS = ['firstname', 'lastname', 'company_name',
+    REQUIRED_FIELDS = ['first_name', 'last_name', 'company_name',
                        'address', 'zipcode', 'city', 'phone_number']
-
-    objects = MarketUserManager()
 
     def __str__(self):
-        return f"{self.firstname} {self.lastname} ({self.get_role_display()})"
-        return f"{self.firstname} {self.lastname} ({self.get_role_display()})"
+        return f"{self.first_name} {self.last_name} ({self.get_role_display()})"
 
     @property
     def id(self):
@@ -171,12 +116,6 @@ class MarketUser(AbstractUser):
             self.file.delete()
         super().delete(*args, **kwargs)
 
-    def delete(self, *args, **kwargs):
-        if self.file:
-            self.file.delete()
-        super().delete(*args, **kwargs)
-
-
 class Landowner(MarketUser):
     """
     Model for Landowners, inheriting from MarketUser.
@@ -184,9 +123,6 @@ class Landowner(MarketUser):
     Attributes:
         position: Optional position or title of the landowner.
     """
-    class Meta:
-        verbose_name = "Landowner"
-        verbose_name_plural = "Landowners"
     class Meta:
         verbose_name = "Landowner"
         verbose_name_plural = "Landowners"
