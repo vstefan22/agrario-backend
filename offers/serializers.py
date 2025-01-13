@@ -18,7 +18,7 @@ from .models import (
 )
 from reports.models import Report
 import logging
-from django.contrib.gis.geos import GEOSGeometry
+from django.contrib.gis.geos import GEOSGeometry, MultiPolygon
 from django.contrib.gis.gdal import SpatialReference, CoordTransform
 from rest_framework_gis.serializers import GeoFeatureModelSerializer
 
@@ -52,8 +52,21 @@ class LanduseSerializer(serializers.ModelSerializer):
 
 class ParcelSerializer(serializers.ModelSerializer):
     """
-    Serializer for the Parcel model.
+    We'll make `polygon` read-only and define `polygon_coords`
+    for the list of { lat, lng } points from the frontend.
     """
+
+    # `polygon` is read-only in API, so DRF won't try to parse it as geometry
+    polygon = serializers.SerializerMethodField(read_only=True)
+
+    # We'll expect an array of objects like [{ lat: 51.8, lng: 7.46 }, ... ]
+    # on POST/PUT requests
+    polygon_coords = serializers.ListField(
+        child=serializers.DictField(child=serializers.FloatField()),
+        write_only=True,
+        required=False,
+        help_text="Array of { lat, lng } points describing the polygon ring."
+    )
 
     class Meta:
         model = Parcel
@@ -69,58 +82,103 @@ class ParcelSerializer(serializers.ModelSerializer):
             "land_use",
             "area_square_meters",
             "created_by",
-            "polygon",
+            "polygon",            # read-only
+            "polygon_coords",     # write-only
         ]
-        read_only_fields = ["created_by", "area_square_meters"]
+        read_only_fields = ["created_by", "area_square_meters", "polygon"]
 
-    def validate_polygon(self, value):
+    def get_polygon(self, obj):
         """
-        Custom validation for the polygon field.
-        Ensures it is a valid list of lat/lng points and converts to MultiPolygon.
+        Return a simple representation of the polygon if you want to
+        show it in GET responses. For example, GeoJSON or WKT.
         """
-        if not isinstance(value, list):
-            raise serializers.ValidationError(
-                "Polygon must be a list of coordinates.")
-
-        if len(value) < 3:
-            raise serializers.ValidationError(
-                "Polygon must have at least 3 points.")
-
-        try:
-            # Convert lat/lng pairs to (lng, lat) tuples
-            coords = [(point["lng"], point["lat"]) for point in value]
-
-            # Ensure the polygon is closed
-            if coords[0] != coords[-1]:
-                coords.append(coords[0])
-
-            # Create a GEOS Polygon
-            polygon = Polygon(coords, srid=4326)
-
-            # Wrap in a MultiPolygon
-            multipolygon = MultiPolygon(polygon, srid=4326)
-
-            return multipolygon
-
-        except (KeyError, TypeError, GEOSException) as e:
-            logger.error(f"Error validating polygon: {e}")
-            raise serializers.ValidationError("Invalid polygon data provided.")
+        if obj.polygon:
+            return obj.polygon.geojson  # or obj.polygon.wkt
+        return None
 
     def create(self, validated_data):
         """
-        Create a Parcel instance with validated polygon data.
+        Build the real 'polygon' from `polygon_coords` if provided.
         """
-        logger.info(f"Creating Parcel with data: {validated_data}")
+        polygon_coords = validated_data.pop("polygon_coords", None)
+
+        if polygon_coords and isinstance(polygon_coords, list):
+            logger.info(f"Received polygon_coords: {polygon_coords}")
+
+            # Convert that array of { lat, lng } to a GeoJSON "Polygon"
+            ring = []
+            for point in polygon_coords:
+                # Each `point` is a dict: { "lat": ..., "lng": ... }
+                lat = point["lat"]
+                lng = point["lng"]
+                ring.append([lng, lat])  # GeoJSON order: [lng, lat]
+
+            # Close the ring if needed (first == last)
+            if ring and ring[0] != ring[-1]:
+                ring.append(ring[0])
+
+            polygon_geojson = {
+                "type": "Polygon",
+                "coordinates": [ring],  # single ring
+            }
+            logger.info(f"Constructed Polygon GeoJSON: {polygon_geojson}")
+
+            try:
+                geom = GEOSGeometry(str(polygon_geojson), srid=4326)
+                # If you want to calculate area in m², transform to WebMerc (EPSG:3857) or any projected SRID
+                if geom.geom_type == "Polygon":
+                    geom = MultiPolygon(geom, srid=geom.srid)
+                geom_3857 = geom.clone()
+                geom_3857.transform(3857)
+                area_sqm = geom_3857.area
+
+                validated_data["polygon"] = geom  # store in lat/lng
+                validated_data["area_square_meters"] = round(area_sqm, 2)
+            except Exception as e:
+                logger.error(
+                    f"Error creating geometry from polygon_coords: {e}")
+                raise serializers.ValidationError({
+                    "polygon": ["Invalid polygon coordinates."]
+                })
+
+        # If not provided, do nothing; polygon remains None
         return super().create(validated_data)
 
-    def validate_area(self, polygon):
+    def update(self, instance, validated_data):
         """
-        Validate the calculated area to ensure it is within reasonable limits.
+        Similarly handle updates if needed.
         """
-        if polygon.area > 10_000_000:  # Example: 10 million m² or 10 km²
-            raise serializers.ValidationError(
-                "The area of the polygon is too large.")
-        return polygon
+        polygon_coords = validated_data.pop("polygon_coords", None)
+
+        if polygon_coords and isinstance(polygon_coords, list):
+            # same logic as in create()
+            ring = []
+            for point in polygon_coords:
+                lat = point["lat"]
+                lng = point["lng"]
+                ring.append([lng, lat])
+            if ring and ring[0] != ring[-1]:
+                ring.append(ring[0])
+
+            polygon_geojson = {
+                "type": "Polygon",
+                "coordinates": [ring],
+            }
+            try:
+                geom = GEOSGeometry(str(polygon_geojson), srid=4326)
+                geom_3857 = geom.clone()
+                geom_3857.transform(3857)
+                area_sqm = geom_3857.area
+
+                instance.polygon = geom
+                instance.area_square_meters = round(area_sqm, 2)
+            except Exception as e:
+                logger.error(f"Error updating geometry: {e}")
+                raise serializers.ValidationError({
+                    "polygon": ["Invalid polygon coordinates."]
+                })
+
+        return super().update(instance, validated_data)
 
 
 class AreaOfferDocumentsSerializer(serializers.ModelSerializer):
