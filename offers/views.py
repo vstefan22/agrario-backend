@@ -468,7 +468,7 @@ class ParcelViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["get"], permission_classes=[FirebaseIsAuthenticated])
     def detailed_view(self, request, pk=None):
         """
-        Retrieve detailed parcel data with conditional display based on purchase status.
+        Retrieve detailed parcel data with conditional display based on user role and purchase status.
         """
         try:
             # Get the parcel object
@@ -476,25 +476,42 @@ class ParcelViewSet(viewsets.ModelViewSet):
             user_email = request.user_email
             user = MarketUser.objects.get(email=user_email)
 
-            # Check if the user has purchased the "Analyse Plus" report
+            # Ensure user has the correct role
+            if user.role != "developer":
+                return Response(
+                    {"error": "Only project developers can view detailed parcel data."},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+
+            # Check if the developer has purchased the "Analyse Plus" report for the parcel
             report_purchased = Report.objects.filter(
-                parcel=parcel, visible_for="USER", purchase_type="analyse_plus").exists()
+                identifier=parcel.id, visible_for="USER", purchase_type="analyse_plus"
+            ).exists()
+
+            # Blur fields for developers without the purchased report
+            def blur_field(value):
+                return "*****" if not report_purchased else value
 
             # Prepare the response data
             data = {
                 "id": parcel.id,
                 "state_name": parcel.state_name,
                 "district_name": parcel.district_name,
-                "municipality_name": parcel.municipality_name,
+                "municipality_name": blur_field(parcel.municipality_name),
                 "land_use": parcel.land_use,
                 "area_square_meters": parcel.area_square_meters,
                 "polygon": parcel.polygon.geojson if parcel.polygon else None,
                 "details": {
-                    "stromnetz": "Full Details" if report_purchased else "Blurred",
-                    "solarpark": "Full Details" if report_purchased else "Blurred",
-                    "windenergie": "Full Details" if report_purchased else "Blurred",
-                    "energiespeicher": "Full Details" if report_purchased else "Blurred",
-                    "biodiversität": "Full Details" if report_purchased else "Blurred",
+                    "plz": blur_field(parcel.zipcode),
+                    "gemeinde": blur_field(parcel.municipality_name),
+                    "gemarkung": blur_field(parcel.cadastral_area),
+                    "flur": blur_field(parcel.plot_number_main),
+                    "flurstueck": blur_field(parcel.plot_number_secondary),
+                    "lage_detail": blur_field(parcel.lage_detail) if hasattr(parcel, "lage_detail") else None,
+                    "nutzung_detail": blur_field(parcel.nutzung_detail) if hasattr(parcel, "nutzung_detail") else None,
+                },
+                "accordion_status": {
+                    "lage_nutzung": report_purchased,  # Open if report purchased, else closed
                 },
                 "actions": {
                     "request_offer": True,
@@ -507,10 +524,12 @@ class ParcelViewSet(viewsets.ModelViewSet):
                 data["error"] = "Analyse Plus needs to be purchased to access these details."
 
             return Response(data, status=status.HTTP_200_OK)
+
         except Parcel.DoesNotExist:
             return Response({"error": "Parcel does not exist."}, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
     def get_queryset(self):
         """

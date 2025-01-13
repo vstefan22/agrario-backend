@@ -60,6 +60,7 @@ class ParcelSerializer(serializers.ModelSerializer):
 
     # `polygon` is read-only in API, so DRF won't try to parse it as geometry
     polygon = serializers.SerializerMethodField(read_only=True)
+    id = serializers.UUIDField(source='identifier')
 
     # We'll expect an array of objects like [{ lat: 51.8, lng: 7.46 }, ... ]
     # on POST/PUT requests
@@ -186,6 +187,7 @@ class ParcelListSerializer(serializers.ModelSerializer):
     """
     Serializer for listing parcels with limited fields.
     """
+    id = serializers.UUIDField(source='identifier')
     class Meta:
         model = Parcel
         fields = ["id", "state_name", "land_use", "area_square_meters", "polygon"]
@@ -201,6 +203,56 @@ class WatchlistSerializer(serializers.ModelSerializer):
         model = Watchlist
         fields = ["id", "parcel", "parcel_details", "added_at"]
         read_only_fields = ["added_at"]
+
+class ParcelDetailsSerializer(serializers.ModelSerializer):
+    """
+    Serializer for detailed parcel view with field blurring based on restrictions.
+    """
+
+    blurred_fields = ["plz", "gemeinde", "gemarkung", "flur", "flurstueck"]
+    id = serializers.UUIDField(source='identifier')
+
+    def to_representation(self, instance):
+        """
+        Blur specific fields and restrict data for sensitive sections.
+        """
+        data = super().to_representation(instance)
+
+        # Blur specific fields in the table
+        for field in self.blurred_fields:
+            if field in data:
+                data[field] = "*****"
+
+        # Blur fields under "Lage und Nutzung" accordion
+        accordion_fields = ["lage_detail", "nutzung_detail"]  # Replace with actual fields
+        for field in accordion_fields:
+            if field in data:
+                data[field] = "*****"
+
+        return data
+
+    class Meta:
+        model = Parcel
+        fields = [
+            "id",
+            "state_name",
+            "district_name",
+            "municipality_name",
+            "cadastral_area",
+            "cadastral_parcel",
+            "plot_number_main",
+            "plot_number_secondary",
+            "land_use",
+            "area_square_meters",
+            "polygon",
+            "plz",
+            "gemeinde",
+            "gemarkung",
+            "flur",
+            "flurstueck",
+            "lage_detail",  # Example field under "Lage und Nutzung"
+            "nutzung_detail",  # Example field under "Lage und Nutzung"
+        ]
 
 
 class AreaOfferDocumentsSerializer(serializers.ModelSerializer):

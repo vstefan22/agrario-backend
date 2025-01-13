@@ -128,7 +128,7 @@ class MarketUserViewSet(viewsets.ModelViewSet):
     )
     def confirm_email(self, request, uidb64, token):
         """
-        Confirms the user's email address.
+        Confirms the user's email address and redirects to the frontend login page.
         """
         try:
             uid = urlsafe_base64_decode(uidb64).decode()
@@ -142,23 +142,24 @@ class MarketUserViewSet(viewsets.ModelViewSet):
         if default_token_generator.check_token(user, token):
             if user.is_email_confirmed:
                 return Response(
-                    {"message": "Your email is already confirmed. You can log in now."},
+                    {"message": "Your email is already confirmed. Redirecting to the login page."},
                     status=status.HTTP_200_OK,
+                    headers={"Location": f"{settings.FRONTEND_URL}/login"}
                 )
             user.is_email_confirmed = True
             user.is_active = True
-            user.privacy_accepted = True
-            user.terms_accepted = True
             user.save()
             return Response(
-                {"message": "Your account has been confirmed successfully. You can log in now."},
+                {"message": "Your account has been confirmed successfully. Redirecting to the login page."},
                 status=status.HTTP_200_OK,
+                headers={"Location": f"{settings.FRONTEND_URL}/login"}
             )
 
         return Response(
             {"error": "Invalid or expired confirmation link."},
             status=status.HTTP_400_BAD_REQUEST,
         )
+
 
 
 class LoginView(APIView):
