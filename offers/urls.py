@@ -10,6 +10,7 @@ from .views import (
     AreaOfferViewSet,
     LanduseViewSet,
     ParcelViewSet,
+    ParcelGeoViewSet
 )
 
 # Initialize the router and register viewsets
@@ -20,6 +21,7 @@ router.register(r"area_offers", AreaOfferViewSet, basename="area-offers")
 router.register(
     r"area_offer_documents", AreaOfferDocumentsViewSet, basename="area-offer-documents"
 )
-
+router.register(r'parcel_geo_data', ParcelGeoViewSet,
+                basename='parcel-geo-data'),
 # Define URL patterns
 urlpatterns = router.urls

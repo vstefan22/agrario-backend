@@ -40,7 +40,7 @@ class Parcel(models.Model):
         district_name: Name of the district where the parcel is located.
         municipality_name: Name of the municipality.
         cadastral_area: Cadastral area of the parcel.
-        cadastral_sector: Cadastral sector of the parcel.
+        cadastral_parcel: Cadastral sector of the parcel.
         plot_number_main: Main plot number.
         plot_number_secondary: Secondary plot number.
         land_use: Description of land usage.
@@ -54,17 +54,24 @@ class Parcel(models.Model):
         ("available", "Available"),
         ("purchased", "Purchased"),
     ]
+    alkis_feature_id = models.CharField(max_length=30)
+    zipcode = models.CharField(null=True, blank=True, max_length=30)
 
-    state_name = models.CharField(max_length=64)
-    district_name = models.CharField(max_length=64)
-    municipality_name = models.CharField(max_length=64)
-    cadastral_area = models.CharField(max_length=64)
-    cadastral_sector = models.CharField(max_length=64)
+    state_name = models.CharField(max_length=255)
+    district_name = models.CharField(max_length=255)
+    municipality_name = models.CharField(max_length=255)
+    cadastral_area = models.CharField(max_length=255)
+
+    communal_district = models.CharField(max_length=64)
+    cadastral_parcel = models.CharField(max_length=255)
+
     plot_number_main = models.CharField(max_length=8, null=True)
-    plot_number_secondary = models.CharField(max_length=8)
-    land_use = models.CharField(max_length=255)
+    plot_number_secondary = models.CharField(
+        max_length=8, null=True, blank=True)
+    land_use = models.CharField(null=True, blank=True, max_length=255)
     area_square_meters = models.DecimalField(max_digits=12, decimal_places=2)
-    polygon = gis_models.PolygonField(
+
+    polygon = gis_models.MultiPolygonField(
         null=True, blank=True)  # GeoDjango field for polygons
     status = models.CharField(
         max_length=20, choices=STATUS_CHOICES, default="available")
@@ -73,20 +80,21 @@ class Parcel(models.Model):
         "AreaOffer", related_name="parcels", on_delete=models.SET_NULL, null=True
     )
     created_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="created_parcels"
+
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.CASCADE, related_name="created_parcels"
     )
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
         return f"Parcel in {self.state_name}, {self.district_name}"
-    
 
 
 class BasketItem(models.Model):
     """
     Represents a parcel in the user's basket.
     """
-    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="basket_items")
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="basket_items")
     parcel = models.ForeignKey(Parcel, on_delete=models.CASCADE)
     added_at = models.DateTimeField(auto_now_add=True)
 
@@ -101,18 +109,19 @@ class AreaOffer(models.Model):
 
     identifier = models.UUIDField(
         primary_key=True, default=uuid.uuid4, editable=False)
+
     offer_number = models.PositiveIntegerField(
         auto_created=True, unique=True, editable=False)
-    title = models.CharField(max_length=255)
-    description = models.TextField()
+    # title = models.CharField(max_length=255)
+    # description = models.TextField()
     # Dynamic key-value pairs
     criteria = models.JSONField(default=dict, blank=True)
 
     class OfferStatus(models.TextChoices):
-        IN_PREPARATION = "V", _("In Preparation")
-        PREPARED = "P", _("Prepared")
-        ACTIVE = "A", _("Active")
-        INACTIVE = "I", _("Inactive")
+        IN_PREPARATION = "V", _("In Vorbereitung")  # after creation
+        PREPARED = "P", _("Vorprüfung abgeschlossen")
+        ACTIVE = "A", _("Aktiv")
+        INACTIVE = "I", _("Inaktiv")
 
     status = models.CharField(
         max_length=2, choices=OfferStatus.choices, default=OfferStatus.IN_PREPARATION
@@ -124,15 +133,12 @@ class AreaOffer(models.Model):
     available_from = models.DateField()
 
     def save(self, *args, **kwargs):
-        if self.offer_number is None:  # Generate only if not already set
+        if not self.offer_number:
             self.offer_number = self.generate_offer_number()
         super().save(*args, **kwargs)
 
     @staticmethod
     def generate_offer_number():
-        """
-        Generate a unique 6-digit offer number.
-        """
         while True:
             offer_number = random.randint(100000, 999999)
             if not AreaOffer.objects.filter(offer_number=offer_number).exists():
@@ -147,8 +153,31 @@ class AreaOffer(models.Model):
         max_length=2, choices=AreaUtilization.choices, default=AreaUtilization.NO_RESTRICTION
     )
 
+    # excluded_landuse = models.ManyToManyField(Landuse, related_name="offers")
+
+    class DeveloperRegionality(models.TextChoices):
+        NO_RESTRICTION = "NO", _("Keine Einschränkung")
+        GERMANY = "DE", _("Firmensitz in Deutschland")
+        FEDERAL_STATE = "BL", _("Firmensitz im Bundesland des Grundstücks")
+
+    preferred_regionality = models.TextField(
+        choices=DeveloperRegionality, default=DeveloperRegionality.NO_RESTRICTION
+    )
+
+    class ShareholderModel(models.TextChoices):
+        NO_RESTRICTION = "NO", _("Keine Einschränkung")
+        SHARES_INCOME = "IN", _("Beteiligungen am Erlös")
+        SHARES_COMPANY = "CO", _("Beteiligungen an der Projektgesellschaft")
+        BOTH = "BO", _("Beides")
+
+    shareholder_model = models.TextField(
+        choices=ShareholderModel, default=ShareholderModel.NO_RESTRICTION
+    )
+
+    important_remarks = models.TextField()
+
     def __str__(self):
-        return f"{self.title} (#{self.offer_number})"
+        return f"Offer #{self.offer_number}"
 
 
 class AreaOfferDocuments(models.Model):

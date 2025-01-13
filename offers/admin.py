@@ -44,7 +44,6 @@ class AreaOfferAdmin(admin.ModelAdmin):
     list_display = (
         "identifier",  # Unique identifier
         "offer_number",  # Offer number
-        "title",  # Title of the offer
         "status",  # Current status of the offer
         "utilization",  # Utilization type (Sale, Lease, etc.)
         "available_from",  # Availability date
@@ -55,7 +54,7 @@ class AreaOfferAdmin(admin.ModelAdmin):
         "utilization",  # Filter by utilization type
         "available_from",  # Filter by availability date
     )
-    search_fields = ("title", "description", "offer_number")  # Search fields
+    search_fields = ("offer_number", "available_from")  # Search fields
     ordering = ("-available_from",)  # Default ordering
 
 
