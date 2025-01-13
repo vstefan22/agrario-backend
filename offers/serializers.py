@@ -74,7 +74,6 @@ class ParcelSerializer(serializers.ModelSerializer):
     class Meta:
         model = Parcel
         fields = [
-            "id",
             "state_name",
             "district_name",
             "municipality_name",
@@ -187,7 +186,6 @@ class ParcelListSerializer(serializers.ModelSerializer):
     """
     Serializer for listing parcels with limited fields.
     """
-    id = serializers.UUIDField(source='identifier')
     class Meta:
         model = Parcel
         fields = ["id", "state_name", "land_use", "area_square_meters", "polygon"]
@@ -197,7 +195,7 @@ class WatchlistSerializer(serializers.ModelSerializer):
     """
     Serializer for user's watchlist.
     """
-    parcel_details = ParcelListSerializer(source="parcel", read_only=True)
+    parcel_details = ParcelSerializer(source="parcel", read_only=True)
 
     class Meta:
         model = Watchlist

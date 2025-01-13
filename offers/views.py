@@ -7,6 +7,7 @@ import logging
 from decimal import Decimal
 from django.contrib.gis.geos import GEOSGeometry
 from django.contrib.gis.db.models.functions import Transform
+from django.shortcuts import get_object_or_404
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import BasePermission, IsAuthenticated
@@ -422,62 +423,42 @@ class ParcelViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["get"], permission_classes=[FirebaseIsAuthenticated])
     def detailed_view(self, request, pk=None):
         """
-        Retrieve detailed parcel data with conditional display based on user role and purchase status.
+        Retrieve detailed parcel data with associated offer information using serializers.
         """
         try:
-            # Get the parcel object
-            parcel = self.get_object()
+            parcel = get_object_or_404(Parcel, pk=pk)
             user_email = request.user_email
             user = MarketUser.objects.get(email=user_email)
 
-            # Ensure user has the correct role
             if user.role != "developer":
                 return Response(
                     {"error": "Only project developers can view detailed parcel data."},
                     status=status.HTTP_403_FORBIDDEN
                 )
 
-            # Check if the developer has purchased the "Analyse Plus" report for the parcel
             report_purchased = Report.objects.filter(
                 identifier=parcel.id, visible_for="USER", purchase_type="analyse_plus"
             ).exists()
 
-            # Blur fields for developers without the purchased report
-            def blur_field(value):
-                return "*****" if not report_purchased else value
+            parcel_serializer = ParcelSerializer(parcel, context={'request': request})
 
-            # Prepare the response data
-            data = {
-                "id": parcel.id,
-                "state_name": parcel.state_name,
-                "district_name": parcel.district_name,
-                "municipality_name": blur_field(parcel.municipality_name),
-                "land_use": parcel.land_use,
-                "area_square_meters": parcel.area_square_meters,
-                "polygon": parcel.polygon.geojson if parcel.polygon else None,
-                "details": {
-                    "plz": blur_field(parcel.zipcode),
-                    "gemeinde": blur_field(parcel.municipality_name),
-                    "gemarkung": blur_field(parcel.cadastral_area),
-                    "flur": blur_field(parcel.plot_number_main),
-                    "flurstueck": blur_field(parcel.plot_number_secondary),
-                    "lage_detail": blur_field(parcel.lage_detail) if hasattr(parcel, "lage_detail") else None,
-                    "nutzung_detail": blur_field(parcel.nutzung_detail) if hasattr(parcel, "nutzung_detail") else None,
-                },
-                "accordion_status": {
-                    "lage_nutzung": report_purchased,  # Open if report purchased, else closed
-                },
-                "actions": {
-                    "request_offer": True,
-                    "download_report": report_purchased,
-                    "buy_analyse_plus": not report_purchased,
-                },
-            }
+            offer_data = {}
+            if parcel.appear_in_offer:
+                offer_serializer = AreaOfferSerializer(parcel.appear_in_offer, context={'request': request})
+                offer_data = offer_serializer.data
 
             if not report_purchased:
-                data["error"] = "Analyse Plus needs to be purchased to access these details."
+                parcel_data = parcel_serializer.data
+                parcel_data["analyze_plus"] = report_purchased
+            else:
+                parcel_data = parcel_serializer.data
 
-            return Response(data, status=status.HTTP_200_OK)
+            response_data = {
+                "parcel": parcel_data,
+                "offer": offer_data
+            }
+
+            return Response(response_data, status=status.HTTP_200_OK)
 
         except Parcel.DoesNotExist:
             return Response({"error": "Parcel does not exist."}, status=status.HTTP_404_NOT_FOUND)
@@ -506,17 +487,14 @@ class ParcelViewSet(viewsets.ModelViewSet):
 
         return queryset
     
-    @action(detail=False, methods=["post"], url_path="add-to-watchlist")
-    def add_to_watchlist(self, request):
+    @action(detail=True, methods=["post"], url_path="add-to-watchlist", permission_classes=[FirebaseIsAuthenticated])
+    def add_to_watchlist(self, request, pk=None):
         """
-        Add a parcel to the user's watchlist.
+        Add a parcel to the user's watchlist using parcel ID from the URL.
         """
-        parcel_id = request.data.get("parcel_id")
-        if not parcel_id:
-            return Response({"error": "Parcel ID is required."}, status=status.HTTP_400_BAD_REQUEST)
-
         try:
-            parcel = Parcel.objects.get(id=parcel_id)
+            # Dohvatanje parcele preko ID-a iz URL-a (pk)
+            parcel = Parcel.objects.get(id=pk)
             watchlist_item, created = Watchlist.objects.get_or_create(
                 user=request.user, parcel=parcel
             )
@@ -528,30 +506,61 @@ class ParcelViewSet(viewsets.ModelViewSet):
         except Parcel.DoesNotExist:
             return Response({"error": "Parcel not found."}, status=status.HTTP_404_NOT_FOUND)
 
-    @action(detail=False, methods=["post"], url_path="remove-from-watchlist")
-    def remove_from_watchlist(self, request):
+    @action(detail=True, methods=["post"], url_path="remove-from-watchlist", permission_classes=[FirebaseIsAuthenticated])
+    def remove_from_watchlist(self, request, pk=None):
         """
-        Remove a parcel from the user's watchlist.
+        Remove a parcel from the user's watchlist using parcel ID from the URL.
         """
-        parcel_id = request.data.get("parcel_id")
-        if not parcel_id:
-            return Response({"error": "Parcel ID is required."}, status=status.HTTP_400_BAD_REQUEST)
-
         try:
-            watchlist_item = Watchlist.objects.get(user=request.user, parcel_id=parcel_id)
+            parcel = Parcel.objects.get(id=pk)
+            watchlist_item = Watchlist.objects.get(user=request.user, parcel=parcel)
             watchlist_item.delete()
             return Response({"message": "Parcel removed from watchlist."}, status=status.HTTP_200_OK)
+        except Parcel.DoesNotExist:
+            return Response({"error": "Parcel not found."}, status=status.HTTP_404_NOT_FOUND)
         except Watchlist.DoesNotExist:
             return Response({"error": "Parcel not in the watchlist."}, status=status.HTTP_404_NOT_FOUND)
 
-    @action(detail=False, methods=["get"], url_path="watchlist")
+
+    @action(detail=False, methods=["get"], url_path="watchlist", permission_classes=[FirebaseIsAuthenticated])
     def list_watchlist(self, request):
         """
-        List all parcels in the user's watchlist.
+        List all parcels in the user's watchlist with criteria from AreaOffer.
         """
-        watchlist_items = Watchlist.objects.filter(user=request.user)
-        serializer = WatchlistSerializer(watchlist_items, many=True)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        watchlist_items = Watchlist.objects.filter(user=request.user).values_list('parcel', flat=True)
+        parcels_in_watchlist = Parcel.objects.filter(id__in=watchlist_items)
+
+        response_data = []
+
+        for parcel in parcels_in_watchlist:
+            parcel_data = ParcelSerializer(parcel, context={'request': request}).data
+            criteria_data = parcel.appear_in_offer.criteria if parcel.appear_in_offer else {}
+
+            response_data.append({
+                "parcel": parcel_data,
+                "criteria": criteria_data
+            })
+
+        return Response({"parcels": response_data}, status=status.HTTP_200_OK)
+    
+    @action(detail=False, methods=["get"], url_path="registered-parcels", permission_classes=[FirebaseIsAuthenticated])
+    def registered_parcels(self, request):
+        """
+        Vraća sve parcele koje imaju vezan AreaOffer sa odvojenim kriterijumima.
+        """
+        parcels_with_offer = Parcel.objects.filter(appear_in_offer__isnull=False)
+        response_data = []
+
+        for parcel in parcels_with_offer:
+            parcel_data = ParcelSerializer(parcel, context={'request': request}).data
+            criteria_data = parcel.appear_in_offer.criteria if parcel.appear_in_offer else {}
+
+            response_data.append({
+                "parcel": parcel_data,
+                "criteria": criteria_data
+            })
+
+        return Response({"parcels": response_data}, status=status.HTTP_200_OK)
 
 
 class ParcelOwnershipPermission(IsAuthenticated):
