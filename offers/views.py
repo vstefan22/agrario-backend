@@ -568,63 +568,68 @@ class AreaOfferViewSet(viewsets.ModelViewSet):
     queryset = AreaOffer.objects.all()
     serializer_class = AreaOfferSerializer
     permission_classes = [FirebaseIsAuthenticated]
-
     parser_classes = [MultiPartParser, FormParser, JSONParser]
 
     def perform_create(self, serializer):
-        offer = serializer.save()
-        self._handle_uploaded_files(offer)
-        offer.refresh_from_db()
+        """
+        Handle parcel associations and dynamically set the created_by field.
+        """
+        # Save the AreaOffer with the created_by field dynamically set
+        area_offer = serializer.save(created_by=self.request.user)
 
-    def perform_update(self, serializer):
-        offer = serializer.save()
-        self._handle_uploaded_files(offer)
+        # Associate parcels if parcel_ids are provided
+        parcel_ids = self.request.data.get("parcel_ids", [])
+        if parcel_ids:
+            parcels = Parcel.objects.filter(id__in=parcel_ids, appear_in_offer__isnull=True)
+            for parcel in parcels:
+                parcel.appear_in_offer = area_offer
+                parcel.save()  # Explicitly save each parcel
 
-        offer.refresh_from_db()
+        # Refresh the instance to include updated reverse relationships
+        area_offer.refresh_from_db()
 
-    @action(detail=True, methods=["post"], permission_classes=[IsAuthenticated])
-    def prepare_offer(self, request, pk=None):
-        offer = self.get_object()
-        serializer = self.get_serializer(
-            offer, data=request.data, partial=True)
-        if serializer.is_valid():
-            offer = serializer.save()
-            self._handle_uploaded_files(offer)
-            return Response(serializer.data, status=status.HTTP_200_OK)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        # Handle uploaded documents
+        self._handle_uploaded_files(area_offer)
 
-    @action(detail=True, methods=["post"])
-    def deactivate(self, request, pk=None):
-        offer = self.get_object()
-        if offer.created_by != request.user:
-            return Response(
-                {"error": "You are not allowed to deactivate this offer."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
-        offer.status = AreaOffer.OfferStatus.INACTIVE
-        offer.save()
-        return Response({"message": "Offer deactivated successfully."}, status=status.HTTP_200_OK)
+    def perform_create(self, serializer):
+        """
+        Handle parcel associations and dynamically set the created_by field.
+        """
+        # Save the AreaOffer with the created_by field dynamically set
+        area_offer = serializer.save(created_by=self.request.user)
+
+        # Associate parcels if parcel_ids are provided
+        parcel_ids = self.request.data.get("parcel_ids", [])
+        print("parcel_ids         ======>       ",parcel_ids)
+        if parcel_ids:
+            parcels = Parcel.objects.filter(id__in=parcel_ids, appear_in_offer__isnull=True)
+            print("parcels", parcels)
+            for parcel in parcels:
+                print("for parcel in parcels: ", parcel)
+                parcel.appear_in_offer = area_offer
+                print("parcel", parcel)
+                print("appear_in_offer", parcel.appear_in_offer)
+                parcel.save()  # Save each parcel explicitly to update the relationship
+
+        # Refresh the instance to include updated reverse relationships
+        area_offer = AreaOffer.objects.prefetch_related("parcels").get(pk=area_offer.pk)
+        print("area_offer", area_offer)
+
+        # Handle uploaded documents
+        self._handle_uploaded_files(area_offer)
 
     def get_queryset(self):
+        """
+        Include parcels in the queryset to ensure the relationship is fetched.
+        """
         queryset = super().get_queryset()
-        user_email = self.request.user_email
-        if user_email:
-            queryset = queryset.filter(created_by__email=user_email)
-        return queryset
-
-    def list(self, request, *args, **kwargs):
-        queryset = self.filter_queryset(self.get_queryset())
-        if not queryset.exists():
-            return Response({"message": "No offers found."}, status=status.HTTP_200_OK)
-        page = self.paginate_queryset(queryset)
-        if page is not None:
-            serializer = self.get_serializer(page, many=True)
-            return self.get_paginated_response(serializer.data)
-        serializer = self.get_serializer(queryset, many=True)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        print("queryset", queryset)
+        return queryset.prefetch_related("parcels")
 
     def _handle_uploaded_files(self, offer):
-
+        """
+        Handles uploaded files for an AreaOffer.
+        """
         files = self.request.FILES.getlist('documents')
         for file in files:
             AreaOfferDocuments.objects.create(offer=offer, document=file)

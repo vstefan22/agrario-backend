@@ -60,7 +60,7 @@ class ParcelSerializer(serializers.ModelSerializer):
 
     # `polygon` is read-only in API, so DRF won't try to parse it as geometry
     polygon = serializers.SerializerMethodField(read_only=True)
-    id = serializers.UUIDField(source='identifier')
+    # id = serializers.UUIDField(source='identifier')
 
     # We'll expect an array of objects like [{ lat: 51.8, lng: 7.46 }, ... ]
     # on POST/PUT requests
@@ -280,6 +280,8 @@ class AreaOfferSerializer(serializers.ModelSerializer):
     shareholder_model_display = serializers.CharField(
         source="get_shareholder_model_display", read_only=True)
 
+    parcels = ParcelSerializer(many=True, read_only=True)
+
     documented_offers = AreaOfferDocumentsSerializer(many=True, read_only=True)
 
     class Meta:
@@ -299,14 +301,16 @@ class AreaOfferSerializer(serializers.ModelSerializer):
             "shareholder_model",
             "shareholder_model_display",
             "important_remarks",
-            "documented_offers"
+            "documented_offers",
+            "parcels",
         ]
         extra_kwargs = {"created_by": {"read_only": True}}
 
     def create(self, validated_data):
-        request = self.context.get('request')
-        user = request.user if request else None
-        return AreaOffer.objects.create(created_by=user, **validated_data)
+        """
+        Ensure the `created_by` field is set dynamically in the ViewSet, not here.
+        """
+        return super().create(validated_data)
 
     def validate_criteria(self, value):
         if not isinstance(value, dict):
