@@ -15,7 +15,8 @@ from .models import (
     AreaOfferDocuments,
     Landuse,
     Parcel,
-    Watchlist
+    Watchlist,
+    BasketItem
 )
 from reports.models import Report
 import logging
@@ -182,6 +183,22 @@ class ParcelSerializer(serializers.ModelSerializer):
                 })
 
         return super().update(instance, validated_data)
+
+from rest_framework import serializers
+
+class BasketItemSerializer(serializers.ModelSerializer):
+    parcel = ParcelSerializer()
+
+    class Meta:
+        model = BasketItem
+        fields = ["id", "parcel", "added_at", "user"]
+
+    def to_representation(self, instance):
+        from accounts.serializers import LandownerSerializer
+
+        representation = super().to_representation(instance)
+        representation['user'] = LandownerSerializer(instance.user).data
+        return representation
     
 class ParcelListSerializer(serializers.ModelSerializer):
     """
