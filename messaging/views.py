@@ -43,36 +43,14 @@ class MessageViewSet(viewsets.ModelViewSet):
     serializer_class = MessageSerializer
     permission_classes = [IsAuthenticated]
 
-    def get_queryset(self):
-        """
-        Retrieve messages related to chats involving the authenticated user.
-        """
-        user = self.request.user
-        return Message.objects.filter(
-            models.Q(chat__user1=user) | models.Q(chat__user2=user),
-            archived=False
-        ).order_by(self.request.query_params.get('sort_by', '-created_at'))  # Default: newest first
-
     def perform_create(self, serializer):
-        """
-        Handle creating a new message, including attaching files and checking for a chat.
-        """
         sender = self.request.user
-        recipient_id = self.request.data.get("recipient_id")
+        agrario_support = MarketUser.objects.get(email="support@agrario.com")
 
-        if not recipient_id:
-            raise ValidationError({"recipient_id": "Recipient ID is required."})
+        # Ensure chat is created between the sender and Agrario Support
+        chat, created = Chat.objects.get_or_create(user1=sender, user2=agrario_support)
 
-        recipient = MarketUser.objects.filter(identifier=recipient_id).first()
-        if not recipient:
-            raise ValidationError({"recipient_id": "Recipient not found."})
-
-        chat, created = Chat.objects.get_or_create(user1=sender, user2=recipient)
-
-        # Attach previous messages in the same chat
-        previous_messages = Message.objects.filter(chat=chat).order_by('created_at')
-        serializer.context['previous_messages'] = previous_messages
-
+        # Save the message and pass the chat explicitly
         serializer.save(sender=sender, chat=chat)
 
     @action(detail=True, methods=['get'], url_path='conversation')

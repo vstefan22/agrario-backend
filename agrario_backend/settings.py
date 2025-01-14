@@ -40,7 +40,8 @@ STRIPE_SUCCESS_URL = "https://your-backend-url/api/payments/success/"
 STRIPE_CANCEL_URL = "https://your-backend-url/api/payments/cancel/"
 
 
-ANALYSE_PLUS_RATE = 2
+ANALYSE_PLUS_RATE = 1
+TAX_RATE = 0.19
 
 ALLOWED_HOSTS = [
     '127.0.0.1',
@@ -280,8 +281,8 @@ STORAGES = {
     },
 }
 
-GDAL_LIBRARY_PATH = r"C:\Users\merlin\anaconda3\envs\agrario_env\Library\bin\gdal.dll"
-GEOS_LIBRARY_PATH  = r"C:\Users\merlin\anaconda3\envs\agrario_env\Library\bin\geos_c.dll"
+# GDAL_LIBRARY_PATH = r"C:\Users\merlin\anaconda3\envs\agrario_env\Library\bin\gdal.dll"
+# GEOS_LIBRARY_PATH  = r"C:\Users\merlin\anaconda3\envs\agrario_env\Library\bin\geos_c.dll"
 
 # Static files configuration
 STATIC_URL = "static/"
