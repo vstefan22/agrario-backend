@@ -196,7 +196,7 @@ WSGI_APPLICATION = "agrario_backend.wsgi.application"
 
 
 # Database
-if DEBUG:
+if not DEBUG:
     # POSTGRESQL
     DATABASES = {
         'default': {
