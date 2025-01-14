@@ -27,3 +27,4 @@ class DiscountCode(models.Model):
 
     def is_valid(self):
         return self.valid_from <= timezone.now() <= self.valid_to
+    

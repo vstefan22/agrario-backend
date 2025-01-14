@@ -170,41 +170,6 @@ class ParcelViewSet(viewsets.ModelViewSet):
             status=status.HTTP_201_CREATED,
         )
 
-    @action(detail=False, methods=["get"], permission_classes=[FirebaseIsAuthenticated])
-    def purchased_items(self, request):
-        """
-        Retrieve parcels purchased by the authenticated user and related transactions.
-        """
-        user_email = request.user_email
-        purchased_parcels = Parcel.objects.filter(
-            created_by__email=user_email, status="purchased"
-        )
-        serializer = self.get_serializer(purchased_parcels, many=True)
-
-        # Retrieve successful transactions
-        transactions = PaymentTransaction.objects.filter(
-            user__email=user_email, status="success"
-        )
-
-        transactions_data = [
-            {
-                "transaction_id": txn.identifier,
-                "amount": txn.amount,
-                "currency": txn.currency,
-                "created_at": txn.created_at,
-            }
-            for txn in transactions
-        ]
-
-        return Response(
-            {
-                "message": "Thank you for your purchase!",
-                "purchased_parcels": serializer.data,
-                "transactions": transactions_data,
-            },
-            status=status.HTTP_200_OK,
-        )
-
     @action(detail=True, methods=["post"], permission_classes=[FirebaseIsAuthenticated])
     def buy(self, request, pk=None):
         """

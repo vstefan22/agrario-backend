@@ -1,17 +1,33 @@
 from rest_framework import serializers
 from .models import Report
+from offers.serializers import ParcelSerializer
 
 class ReportSerializer(serializers.ModelSerializer):
+    parcels = ParcelSerializer(many=True)
+    full_access = serializers.SerializerMethodField()
     class Meta:
         model = Report
         fields = [
             "identifier",
+            "created",
+            "parcels",
+            "purchase_type",
+            "full_access",
             "area_m2",
+            "usable_area_m2",
             "usable_area_solar_m2",
             "usable_area_wind_m2",
-            "visible_for",
-            "data",  # Include all calculated metrics
+            "distance_motorway_m",
+            "distance_settlement_m",
+            "data",
         ]
+
+    def get_full_access(self, obj):
+        """
+        Determine if the user has full access to the report.
+        """
+        request = self.context.get("request")
+        return self.context.get("analyse_plus_purchased", False)
 
     def to_representation(self, instance):
         data = super().to_representation(instance)

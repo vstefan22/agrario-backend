@@ -24,9 +24,11 @@ from rest_framework.exceptions import AuthenticationFailed
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from offers.models import AreaOffer, Parcel
+from django.db.models import Q
 from .models import MarketUser, Landowner, ProjectDeveloper
 from .firebase_auth import FirebaseAuthentication, verify_firebase_token, create_firebase_user, refresh_firebase_token
 from .serializers import UserSerializer, LandownerSerializer, ProjectDeveloperSerializer, LandownerDashboardSerializer
+from django.shortcuts import redirect
 from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_encode
 from firebase_admin import auth as firebase_auth
@@ -40,6 +42,10 @@ from django.utils.http import urlsafe_base64_encode
 from firebase_admin import auth as firebase_auth
 from google.cloud import storage
 from .utils import get_user_role
+from payments.models import PaymentTransaction
+from reports.models import Report
+from reports.serializers import ReportSerializer
+from offers.serializers import ParcelSerializer
 
 logger = logging.getLogger(__name__)
 
@@ -145,31 +151,72 @@ class MarketUserViewSet(viewsets.ModelViewSet):
             uid = urlsafe_base64_decode(uidb64).decode()
             user = MarketUser.objects.get(pk=uid)
         except (TypeError, ValueError, OverflowError, MarketUser.DoesNotExist):
-            return Response(
-                {"error": "Invalid or expired confirmation link."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+            # Redirect to frontend error page for invalid or expired links
+            return redirect(f"{settings.FRONTEND_URL}/email-confirmation-error")
 
         if default_token_generator.check_token(user, token):
             if user.is_email_confirmed:
-                return Response(
-                    {"message": "Your email is already confirmed. Redirecting to the login page."},
-                    status=status.HTTP_200_OK,
-                    headers={"Location": f"{settings.FRONTEND_URL}/login"}
-                )
+                # Redirect to the frontend login page if already confirmed
+                return redirect(f"{settings.FRONTEND_URL}/login?status=email_already_confirmed")
             user.is_email_confirmed = True
             user.is_active = True
             user.save()
+            # Redirect to the frontend login page on successful confirmation
+            return redirect(f"{settings.FRONTEND_URL}/login?status=email_confirmed")
+
+        # Redirect to the frontend error page for invalid or expired tokens
+        return redirect(f"{settings.FRONTEND_URL}/email-confirmation-error")
+    
+    @action(detail=False, methods=["get"], permission_classes=[IsAuthenticated])
+    def purchased_items(self, request):
+        """
+        Retrieve purchased reports and related transactions for the authenticated user.
+        """
+        # Ensure the user is authenticated and retrieve their email
+        user_email = getattr(request.user, 'email', None)
+        if not user_email:
             return Response(
-                {"message": "Your account has been confirmed successfully. Redirecting to the login page."},
-                status=status.HTTP_200_OK,
-                headers={"Location": f"{settings.FRONTEND_URL}/login"}
+                {"error": "User email is not available."},
+                status=status.HTTP_400_BAD_REQUEST
             )
 
-        return Response(
-            {"error": "Invalid or expired confirmation link."},
-            status=status.HTTP_400_BAD_REQUEST,
+        # Retrieve purchased reports
+        purchased_reports = Report.objects.filter(
+            parcels__created_by__email=user_email,  # Only reports linked to parcels created by the user
+            purchase_type="analyse_plus"  # Ensure only purchased reports are considered
+        ).distinct()
+
+        # Serialize purchased reports
+        report_serializer = ReportSerializer(purchased_reports, many=True)
+
+        # Retrieve successful transactions
+        transactions = PaymentTransaction.objects.filter(
+            user__email=user_email,
+            status="success"
         )
+
+        # Serialize transactions
+        transactions_data = [
+            {
+                "transaction_id": txn.identifier,
+                "amount": txn.amount,
+                "currency": txn.currency,
+                "created_at": txn.created_at,
+            }
+            for txn in transactions
+        ]
+
+        # Return response with both purchased reports and transactions
+        return Response(
+            {
+                "message": "Your purchased items.",
+                "purchased_reports": report_serializer.data,
+                "transactions": transactions_data,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
 
 
 

@@ -141,17 +141,35 @@ class ReportViewSet(viewsets.ModelViewSet):
         except Exception as e:
             logger.error(f"Unexpected error in create_report: {str(e)}")
             return Response({"error": f"An unexpected error occurred: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-
-
-    @action(detail=True, methods=["get"])
-    def preview(self, request, pk=None):
+        
+    @action(detail=True, methods=["get"], permission_classes=[FirebaseIsAuthenticated])
+    def view_report(self, request, pk=None):
         """
-        Provide a preview of the report with limited data.
+        Retrieve report details with conditional access based on purchase type.
         """
         report = get_object_or_404(Report, identifier=pk)
-        serializer = self.get_serializer(report, context={"analyse_plus": False})
+
+        # Check Analyse Plus purchase
+        is_analyse_plus_purchased = report.purchase_type == "analyse_plus" and \
+                                    request.user.role == "landowner"
+
+        serializer = ReportSerializer(
+            report,
+            context={"request": request, "analyse_plus_purchased": is_analyse_plus_purchased},
+        )
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+
+
+    # @action(detail=True, methods=["get"])
+    # def preview(self, request, pk=None):
+    #     """
+    #     Provide a preview of the report with limited data.
+    #     """
+    #     report = get_object_or_404(Report, identifier=pk)
+    #     serializer = self.get_serializer(report, context={"analyse_plus": False})
+    #     return Response(serializer.data, status=status.HTTP_200_OK)
 
     @action(detail=True, methods=["get"])
     def download(self, request, pk=None):
