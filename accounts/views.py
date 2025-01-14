@@ -365,7 +365,7 @@ class RefreshTokenView(APIView):
         try:
             tokens = refresh_firebase_token(refresh_token)
             return Response({
-                "access_token": tokens["access_token"],
+                "firebase_token": tokens["access_token"],
                 "refresh_token": tokens["refresh_token"],
                 "expires_in": tokens["expires_in"],
             }, status=status.HTTP_200_OK)
