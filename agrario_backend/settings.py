@@ -31,7 +31,6 @@ SECRET_KEY = os.getenv('SECRET_KEY')
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv("DEBUG", "False").lower() == "true"
 
-DEBUG = os.getenv("DEBUG", "False").lower() == "true"
 
 FRONTEND_URL = os.getenv('FRONTEND_URL')
 BACKEND_URL = os.getenv('BACKEND_URL')
@@ -142,7 +141,7 @@ INSTALLED_APPS = [
     'subscriptions',
     'reports',
     'messaging',
-    'invites', 
+    'invites',
 ]
 
 MIDDLEWARE = [
@@ -195,7 +194,7 @@ WSGI_APPLICATION = "agrario_backend.wsgi.application"
 
 
 # Database
-if DEBUG:
+if not DEBUG:
     # POSTGRESQL
     DATABASES = {
         'default': {
@@ -223,7 +222,8 @@ if firebase_credentials_path and os.path.exists(firebase_credentials_path):
     with open(firebase_credentials_path, "r") as f:
         firebase_config = json.load(f)
 elif firebase_credentials_base64:
-    firebase_config = json.loads(base64.b64decode(firebase_credentials_base64).decode("utf-8"))
+    firebase_config = json.loads(base64.b64decode(
+        firebase_credentials_base64).decode("utf-8"))
 else:
     firebase_config = None  # Default to None to handle missing credentials
 
@@ -278,8 +278,8 @@ STORAGES = {
     },
 }
 
-GDAL_LIBRARY_PATH = r"C:\Users\gacic\anaconda3\envs\agrario_env\Library\bin\gdal.dll"
-GEOS_LIBRARY_PATH  = r"C:\Users\gacic\anaconda3\envs\agrario_env\Library\bin\geos_c.dll"
+# GDAL_LIBRARY_PATH = r"C:\Users\gacic\anaconda3\envs\agrario_env\Library\bin\gdal.dll"
+# GEOS_LIBRARY_PATH  = r"C:\Users\gacic\anaconda3\envs\agrario_env\Library\bin\geos_c.dll"
 
 # Static files configuration
 STATIC_URL = "static/"
