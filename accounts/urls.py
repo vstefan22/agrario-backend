@@ -12,6 +12,7 @@ from .views import (
     MarketUserViewSet,
     FirebasePasswordResetRequestView,
     RoleDashboardView,
+    RefreshTokenView,
 )
 
 # Create a router and register the MarketUser viewset
@@ -28,5 +29,6 @@ urlpatterns = [
         "password-reset/",
         FirebasePasswordResetRequestView.as_view(),
         name="password-reset-request",
-    )
+    ),
+    path('refresh-token/', RefreshTokenView.as_view(), name='refresh-token'),
 ] + router.urls

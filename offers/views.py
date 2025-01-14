@@ -34,7 +34,8 @@ from .serializers import (
     LanduseSerializer,
     ParcelSerializer,
     ParcelGeoSerializer,
-    WatchlistSerializer
+    WatchlistSerializer,
+    BasketItemSerializer
 )
 from accounts.firebase_auth import verify_firebase_token
 
@@ -299,6 +300,29 @@ class ParcelViewSet(viewsets.ModelViewSet):
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+    @action(detail=False, methods=["get"], url_path="basket-items", permission_classes=[FirebaseIsAuthenticated])
+    def basket_items(self, request):
+        """
+        Retrieve all basket items for the authenticated user.
+        """
+        try:
+            user = request.user
+            basket_items = BasketItem.objects.filter(user=user)
+
+            if not basket_items.exists():
+                return Response({"message": "Your basket is empty."}, status=status.HTTP_200_OK)
+
+            parcels = [item.parcel for item in basket_items]
+            serializer = BasketItemSerializer(basket_items, many=True)
+
+            return Response({
+                "message": "Basket items retrieved successfully.",
+                "basket_items": serializer.data
+            }, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
     @action(detail=False, methods=["get"], permission_classes=[FirebaseIsAuthenticated])
     def basket_summary(self, request):
         """
@@ -471,21 +495,23 @@ class ParcelViewSet(viewsets.ModelViewSet):
         Add filtering functionality for parcels.
         """
         queryset = super().get_queryset()
-        state_name = self.request.query_params.get("state_name")
-        district_name = self.request.query_params.get("district_name")
-        min_area = self.request.query_params.get("min_area")
-        max_area = self.request.query_params.get("max_area")
 
-        if state_name:
-            queryset = queryset.filter(state_name__icontains=state_name)
-        if district_name:
-            queryset = queryset.filter(district_name__icontains=district_name)
-        if min_area:
-            queryset = queryset.filter(area_square_meters__gte=min_area)
-        if max_area:
-            queryset = queryset.filter(area_square_meters__lte=max_area)
+        municipality_name = self.request.query_params.get("municipality_name")
+        cadastral_area = self.request.query_params.get("cadastral_area")
+        communal_district = self.request.query_params.get("communal_district")
+        cadastral_parcel = self.request.query_params.get("cadastral_parcel")
+
+        if municipality_name:
+            queryset = queryset.filter(municipality_name__icontains=municipality_name)
+        if cadastral_area:
+            queryset = queryset.filter(cadastral_area__icontains=cadastral_area)
+        if communal_district:
+            queryset = queryset.filter(communal_district__icontains=communal_district)
+        if cadastral_parcel:
+            queryset = queryset.filter(cadastral_parcel__icontains=cadastral_parcel)
 
         return queryset
+
     
     @action(detail=True, methods=["post"], url_path="add-to-watchlist", permission_classes=[FirebaseIsAuthenticated])
     def add_to_watchlist(self, request, pk=None):

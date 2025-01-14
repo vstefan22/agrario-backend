@@ -25,7 +25,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from offers.models import AreaOffer, Parcel
 from .models import MarketUser, Landowner, ProjectDeveloper
-from .firebase_auth import FirebaseAuthentication, verify_firebase_token, create_firebase_user
+from .firebase_auth import FirebaseAuthentication, verify_firebase_token, create_firebase_user, refresh_firebase_token
 from .serializers import UserSerializer, LandownerSerializer, ProjectDeveloperSerializer, LandownerDashboardSerializer
 from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_encode
@@ -277,8 +277,9 @@ class LoginView(APIView):
 
         # Verify the password using Firebase's REST API
         try:
-            firebase_token = self.verify_firebase_password(email, password)
-            print('F', firebase_token)
+            res = self.verify_firebase_password(email, password)
+            firebase_token= res['access_token']
+            refresh_token= res['refresh_token']
         except AuthenticationFailed as e:
             print(e)
             return Response(
@@ -290,8 +291,6 @@ class LoginView(APIView):
                 {"error": f"Error verifying password: {str(e)}"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
-
-        print('WTF')
         # Retrieve the user from the database
         try:
             user = MarketUser.objects.get(email=email)
@@ -316,6 +315,7 @@ class LoginView(APIView):
                 "message": "Login successful",
                 "firebase_uid": user_record.uid,
                 "firebase_token": firebase_token,
+                "refresh_token": refresh_token,
                 "user": user_data,
             },
             status=status.HTTP_200_OK,
@@ -348,8 +348,31 @@ class LoginView(APIView):
             raise AuthenticationFailed("Invalid email or password.")
 
         data = response.json()
-        return data["idToken"]
+        return {
+            "access_token": data["idToken"],
+            "refresh_token": data["refreshToken"]
+        }
 
+class RefreshTokenView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        refresh_token = request.data.get("refresh_token")
+
+        if not refresh_token:
+            return Response({"error": "Refresh token is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            tokens = refresh_firebase_token(refresh_token)
+            return Response({
+                "firebase_token": tokens["access_token"],
+                "refresh_token": tokens["refresh_token"],
+                "expires_in": tokens["expires_in"],
+            }, status=status.HTTP_200_OK)
+        except AuthenticationFailed as e:
+            return Response({"error": str(e)}, status=status.HTTP_401_UNAUTHORIZED)
+        except Exception as e:
+            return Response({"error": f"An unexpected error occurred: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 class RoleDashboardView(APIView):
     """

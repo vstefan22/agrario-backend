@@ -12,6 +12,7 @@ from .models import (
     AreaOfferConfirmation,
     Landuse,
     Parcel,
+    BasketItem,
 )
 
 
@@ -89,3 +90,11 @@ class AreaOfferAdministrationAdmin(admin.ModelAdmin):
     """
 
     list_display = ("id", "offer", "notes", "created_at")
+
+@admin.register(BasketItem)
+class AreaOfferAdministrationAdmin(admin.ModelAdmin):
+    """
+    Admin configuration for the AreaOfferAdministration model.
+    """
+
+    list_display = ("user", "parcel")
