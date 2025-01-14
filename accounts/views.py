@@ -194,6 +194,8 @@ class MarketUserViewSet(viewsets.ModelViewSet):
             user__email=user_email,
             status="success"
         )
+        print("user_email", user_email)
+        print("transactions", transactions)
 
         # Serialize transactions
         transactions_data = [

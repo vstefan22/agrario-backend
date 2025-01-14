@@ -77,6 +77,7 @@ class CreateStripePaymentView(APIView):
             intent = stripe.PaymentIntent.create(
                 amount=int(total_amount * 100),
                 currency=currency,
+                payment_method_types=["card"],
                 metadata=metadata
             )
 
@@ -105,7 +106,7 @@ class StripeWebhookView(APIView):
 
     def post(self, request):
         payload = request.body
-        sig_header = request.META.get('HTTP_STRIPE_SIGNATURE')
+        sig_header = request.META.get("HTTP_STRIPE_SIGNATURE")
         endpoint_secret = settings.STRIPE_ENDPOINT_SECRET
 
         try:
@@ -120,25 +121,28 @@ class StripeWebhookView(APIView):
         stripe_payment_intent = payment_intent["id"]
 
         try:
+            # Retrieve and update the transaction
             transaction = PaymentTransaction.objects.get(stripe_payment_intent=stripe_payment_intent)
+            print("Transaction", transaction)
             if event_type == "payment_intent.succeeded":
                 transaction.status = "success"
+                print("Status before save:", transaction.status)
                 transaction.save()
+                print("Status after save:", transaction.status)
 
-                # Update the report visibility
+                # Update report visibility
                 report_id = payment_intent["metadata"].get("report_id")
                 if report_id:
-                    try:
-                        report = Report.objects.get(identifier=report_id)
-                        report.visible_for = "USER"  # Grant access to the user
+                    report = Report.objects.filter(identifier=report_id).first()
+                    if report:
+                        report.visible_for = "USER"  # Grant user access
                         report.save()
-                    except Report.DoesNotExist:
-                        logger.error(f"Report with ID {report_id} not found.")
+
             elif event_type == "payment_intent.payment_failed":
                 transaction.status = "failed"
                 transaction.save()
 
         except PaymentTransaction.DoesNotExist:
-            logger.error(f"PaymentTransaction with intent {stripe_payment_intent} not found.")
+            logger.error(f"Transaction with intent {stripe_payment_intent} not found.")
 
         return Response({"status": "success"}, status=200)
