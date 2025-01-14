@@ -4,7 +4,7 @@ Firebase authentication module.
 Handles Firebase authentication and user management integration with Django.
 """
 
-import logging
+import logging, requests
 logger = logging.getLogger(__name__)
 from django.db import transaction
 import firebase_admin
@@ -67,6 +67,38 @@ def create_firebase_user(email, password):
         logger.error(f"Firebase user creation error: {str(e)}")
         raise AuthenticationFailed({"error": "Could not create Firebase user. Please check the details."}) from e
 
+def refresh_firebase_token(refresh_token):
+    """
+    Refresh Firebase access token using the refresh token.
+
+    Args:
+        refresh_token (str): The user's refresh token.
+
+    Returns:
+        dict: Contains new access_token and refresh_token.
+    """
+    firebase_api_key = settings.FIREBASE_API_KEY
+    url = f"https://securetoken.googleapis.com/v1/token?key={firebase_api_key}"
+    
+    payload = {
+        "grant_type": "refresh_token",
+        "refresh_token": refresh_token
+    }
+
+    response = requests.post(url, data=payload)
+    
+    if response.status_code != 200:
+        logger.error(f"Failed to refresh token: {response.json()}")
+        raise AuthenticationFailed("Invalid or expired refresh token.")
+
+    data = response.json()
+    
+    return {
+        "firebase_token": data["id_token"],
+        "refresh_token": data["refresh_token"],
+        "expires_in": data["expires_in"]
+    }
+
 class FirebaseAuthentication(BaseAuthentication):
     """
     Custom authentication class for Firebase Authentication.
@@ -79,16 +111,24 @@ class FirebaseAuthentication(BaseAuthentication):
             return None
 
         token = auth_header.split("Bearer ")[1]
+
         decoded_token = verify_firebase_token(token)
         if not decoded_token:
-            raise AuthenticationFailed({"error": "Invalid or expired Firebase token."})
+            refresh_token = request.data.get("refresh_token") or request.headers.get("Refresh-Token")
+            
+            if refresh_token:
+                try:
+                    new_tokens = refresh_firebase_token(refresh_token)
+                    token = new_tokens["access_token"]
+                    decoded_token = verify_firebase_token(token)
+                except AuthenticationFailed:
+                    raise AuthenticationFailed({"error": "Session expired. Please log in again."})
+            else:
+                raise AuthenticationFailed({"error": "Invalid or expired Firebase token."})
 
         email = decoded_token.get("email")
         if not email:
             raise AuthenticationFailed({"error": "Email not found in Firebase token."})
-
-        # Example: Identify superuser by Firebase custom claims
-        is_superuser = decoded_token.get("is_superuser", False)
 
         try:
             with transaction.atomic():
@@ -96,17 +136,10 @@ class FirebaseAuthentication(BaseAuthentication):
                     email=email,
                     defaults={
                         "username": email.split("@")[0],
-                        "is_superuser": is_superuser,
-                        "is_staff": is_superuser,
+                        "is_superuser": decoded_token.get("is_superuser", False),
+                        "is_staff": decoded_token.get("is_superuser", False),
                     },
                 )
-
-                # Update existing user superuser status if needed
-                if user.is_superuser != is_superuser:
-                    user.is_superuser = is_superuser
-                    user.is_staff = is_superuser
-                    user.save(update_fields=["is_superuser", "is_staff"])
-
         except Exception as e:
             raise AuthenticationFailed({"error": "Failed to authenticate user."}) from e
 
