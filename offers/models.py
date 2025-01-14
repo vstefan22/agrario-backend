@@ -169,9 +169,9 @@ class AreaOffer(models.Model):
     utilization = models.CharField(
         max_length=2, choices=AreaUtilization.choices, default=AreaUtilization.NO_RESTRICTION
     )
-    
+
     # excluded_landuse = models.ManyToManyField(Landuse, related_name="offers")
-    
+
     class DeveloperRegionality(models.TextChoices):
         NO_RESTRICTION = "NO", _("Keine Einschränkung")
         GERMANY = "DE", _("Firmensitz in Deutschland")
@@ -224,7 +224,11 @@ class AreaOfferConfirmation(models.Model):
     """
     identifier = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
 
-    
+    class LandownerUtilization(models.TextChoices):
+        SALE = "SA", _("Kauf des Gründstücks")
+        LEASE = "LE", _("Anpachtung des Grundstücks")
+        BOTH = "BO", _("Beides")
+
     offer = models.OneToOneField(
         AreaOffer, on_delete=models.CASCADE, related_name="confirmation"
     )
@@ -232,7 +236,11 @@ class AreaOfferConfirmation(models.Model):
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     confirmed_at = models.DateTimeField(auto_now_add=True)
 
-    utilitization = models.CharField(choices=AreaOffer.AreaUtilization.choices)
+    utilization = models.CharField(
+        max_length=2,
+        choices=LandownerUtilization.choices,
+        help_text=_("Nutzungsart durch den Eigentümer")
+    )
 
     # if utilitization = SALE
     sale_amount = models.DecimalField(
