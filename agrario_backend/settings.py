@@ -133,6 +133,7 @@ INSTALLED_APPS = [
     'rest_framework.authtoken',
     'drf_yasg',
     'django_filters',
+    'rest_framework_gis',
 
     # custom apps
     'accounts',
