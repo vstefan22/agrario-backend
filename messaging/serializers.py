@@ -28,9 +28,8 @@ class SenderSerializer(serializers.ModelSerializer):
         fields = ['id', 'email']
 
 
+
 class MessageSerializer(serializers.ModelSerializer):
-    recipient_id = serializers.UUIDField(write_only=True)  # For input
-    recipient = serializers.StringRelatedField(read_only=True)  # Display recipient in response
     sender = serializers.StringRelatedField(read_only=True)  # Display sender in response
     is_admin_message = serializers.BooleanField(read_only=True)
     attachments = AttachmentSerializer(many=True, read_only=True)
@@ -39,37 +38,26 @@ class MessageSerializer(serializers.ModelSerializer):
         write_only=True,
         required=False
     )
-    previous_messages = serializers.SerializerMethodField()
 
     class Meta:
         model = Message
         fields = (
-            'identifier', 'recipient_id', 'recipient', 'sender', 
-            'subject', 'body', 'attachments', 'attachment_files', 
-            'created_at', 'is_read', 'previous_messages', 'is_admin_message'
+            'identifier', 'sender', 'subject', 'body', 'attachments',
+            'attachment_files', 'created_at', 'is_read', 'is_admin_message'
         )
         read_only_fields = ['identifier', 'created_at', 'is_read', 'attachments', 'sender', 'is_admin_message']
 
-    def get_previous_messages(self, obj):
-        """
-        Retrieve previous messages from the same conversation.
-        """
-        previous_messages = self.context.get('previous_messages', [])
-        return MessageSerializer(previous_messages, many=True).data
-
     def create(self, validated_data):
+        # Extract and remove `chat` from validated_data to avoid duplicate keyword arguments
+        chat = validated_data.pop('chat', None)
+
+        # Handle attachment files
         attachment_files = validated_data.pop('attachment_files', [])
-        sender = validated_data['sender']
 
-        recipient_id = validated_data.pop('recipient_id')
-        recipient = MarketUser.objects.filter(identifier=recipient_id).first()
-        if not recipient:
-            raise serializers.ValidationError({"recipient_id": "Recipient not found."})
-
-        chat, created = Chat.objects.get_or_create(user1=sender, user2=recipient)
-
+        # Create the message
         message = Message.objects.create(chat=chat, **validated_data)
 
+        # Add attachments
         for file in attachment_files:
             attachment = Attachment.objects.create(file=file)
             message.attachments.add(attachment)
