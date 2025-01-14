@@ -75,18 +75,23 @@ class ParcelSerializer(serializers.ModelSerializer):
         model = Parcel
         fields = [
             "id",
+            "zipcode",
             "state_name",
             "district_name",
             "municipality_name",
             "cadastral_area",
             "cadastral_parcel",
+            "communal_district",
             "plot_number_main",
             "plot_number_secondary",
             "land_use",
             "area_square_meters",
+            "status",
+            "appear_in_offer",
             "created_by",
             "polygon",            # read-only
             "polygon_coords",     # write-only
+            "alkis_feature_id"
         ]
         read_only_fields = ["created_by", "area_square_meters", "polygon"]
 
