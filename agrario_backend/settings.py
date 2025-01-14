@@ -134,6 +134,7 @@ INSTALLED_APPS = [
     'rest_framework.authtoken',
     'drf_yasg',
     'django_filters',
+    'rest_framework_gis',
 
     # custom apps
     'accounts',
@@ -195,7 +196,7 @@ WSGI_APPLICATION = "agrario_backend.wsgi.application"
 
 
 # Database
-if DEBUG:
+if not DEBUG:
     # POSTGRESQL
     DATABASES = {
         'default': {
