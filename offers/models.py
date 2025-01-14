@@ -22,6 +22,7 @@ from django.utils.translation import gettext_lazy as _
 from accounts.models import Landowner, MarketUser
 import random
 
+
 class Currency(models.TextChoices):
     EUR = "EUR", _("Euro")
 
@@ -30,6 +31,7 @@ class Ternary(models.TextChoices):
     YES = "YES", _("Ja")
     NO = "NO", _("Nein")
     NOT_SPECIFIED = "NOT", _("Keine Angabe")
+
 
 class Landuse(models.Model):
     """
@@ -180,6 +182,7 @@ class AreaOffer(models.Model):
     preferred_regionality = models.TextField(
         choices=DeveloperRegionality, default=DeveloperRegionality.NO_RESTRICTION
     )
+
     class ShareholderModel(models.TextChoices):
         NO_RESTRICTION = "NO", _("Keine Einschränkung")
         SHARES_INCOME = "IN", _("Beteiligungen am Erlös")
@@ -189,7 +192,7 @@ class AreaOffer(models.Model):
     shareholder_model = models.TextField(
         choices=ShareholderModel, default=ShareholderModel.NO_RESTRICTION
     )
-    
+
     important_remarks = models.TextField()
 
     def __str__(self):
@@ -222,7 +225,8 @@ class AreaOfferConfirmation(models.Model):
         confirmed_by: The user who confirmed the offer.
         confirmed_at: The timestamp when the offer was confirmed.
     """
-    identifier = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    identifier = models.UUIDField(
+        primary_key=True, default=uuid.uuid4, editable=False)
 
     class LandownerUtilization(models.TextChoices):
         SALE = "SA", _("Kauf des Gründstücks")
@@ -285,7 +289,8 @@ class AreaOfferConfirmation(models.Model):
         max_length=500, help_text=_("Ihre Nachricht an Agrario Energy")
     )
 
-    currency = models.CharField(choices=Currency.choices, default=Currency.EUR)
+    currency = models.CharField(
+        max_length=10, choices=Currency.choices, default=Currency.EUR)
 
 
 class AreaOfferAdministration(models.Model):
@@ -324,7 +329,8 @@ class Watchlist(models.Model):
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="watchlist"
     )
-    parcel = models.ForeignKey(Parcel, on_delete=models.CASCADE, related_name="watched_by")
+    parcel = models.ForeignKey(
+        Parcel, on_delete=models.CASCADE, related_name="watched_by")
     added_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

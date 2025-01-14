@@ -41,7 +41,6 @@ class ParcelGeoSerializer(GeoFeatureModelSerializer):
                   'municipality_name', 'cadastral_area', 'area_square_meters', 'cadastral_parcel', 'zipcode', 'communal_district')
         geo_field = 'polygon'
 
-logger=logging.getLogger(__name__)
 
 class LanduseSerializer(serializers.ModelSerializer):
     """
@@ -184,7 +183,6 @@ class ParcelSerializer(serializers.ModelSerializer):
 
         return super().update(instance, validated_data)
 
-from rest_framework import serializers
 
 class BasketItemSerializer(serializers.ModelSerializer):
     parcel = ParcelSerializer()
@@ -199,15 +197,18 @@ class BasketItemSerializer(serializers.ModelSerializer):
         representation = super().to_representation(instance)
         representation['user'] = LandownerSerializer(instance.user).data
         return representation
-    
+
+
 class ParcelListSerializer(serializers.ModelSerializer):
     """
     Serializer for listing parcels with limited fields.
     """
     class Meta:
         model = Parcel
-        fields = ["id", "state_name", "land_use", "area_square_meters", "polygon"]
+        fields = ["id", "state_name", "land_use",
+                  "area_square_meters", "polygon"]
         read_only_fields = ["id", "area_square_meters"]
+
 
 class WatchlistSerializer(serializers.ModelSerializer):
     """
@@ -219,6 +220,7 @@ class WatchlistSerializer(serializers.ModelSerializer):
         model = Watchlist
         fields = ["id", "parcel", "parcel_details", "added_at"]
         read_only_fields = ["added_at"]
+
 
 class ParcelDetailsSerializer(serializers.ModelSerializer):
     """
@@ -240,7 +242,8 @@ class ParcelDetailsSerializer(serializers.ModelSerializer):
                 data[field] = "*****"
 
         # Blur fields under "Lage und Nutzung" accordion
-        accordion_fields = ["lage_detail", "nutzung_detail"]  # Replace with actual fields
+        # Replace with actual fields
+        accordion_fields = ["lage_detail", "nutzung_detail"]
         for field in accordion_fields:
             if field in data:
                 data[field] = "*****"
