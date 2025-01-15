@@ -103,6 +103,7 @@ class Parcel(models.Model):
         settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.CASCADE, related_name="created_parcels"
     )
     created_at = models.DateTimeField(auto_now_add=True)
+    analyse_plus = models.BooleanField(default=False)
 
     def __str__(self):
         return f"Parcel in {self.state_name}, {self.district_name}"
