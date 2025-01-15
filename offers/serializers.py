@@ -153,40 +153,23 @@ class ParcelSerializer(serializers.ModelSerializer):
         return super().create(validated_data)
 
     def update(self, instance, validated_data):
-        """
-        Similarly handle updates if needed.
-        """
-        polygon_coords = validated_data.pop("polygon_coords", None)
 
-        if polygon_coords and isinstance(polygon_coords, list):
-            # same logic as in create()
-            ring = []
-            for point in polygon_coords:
-                lat = point["lat"]
-                lng = point["lng"]
-                ring.append([lng, lat])
-            if ring and ring[0] != ring[-1]:
-                ring.append(ring[0])
+        request = self.context.get('request')
+        user = request.user if request else None
 
-            polygon_geojson = {
-                "type": "Polygon",
-                "coordinates": [ring],
-            }
-            try:
-                geom = GEOSGeometry(str(polygon_geojson), srid=4326)
-                geom_3857 = geom.clone()
-                geom_3857.transform(3857)
-                area_sqm = geom_3857.area
+        if instance.created_by is None:
+            instance.created_by = user
+            instance.save()
+        else:
+            raise serializers.ValidationError({
+                "error": "Parcel already has an assigned user."
+            })
 
-                instance.polygon = geom
-                instance.area_square_meters = round(area_sqm, 2)
-            except Exception as e:
-                logger.error(f"Error updating geometry: {e}")
-                raise serializers.ValidationError({
-                    "polygon": ["Invalid polygon coordinates."]
-                })
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
 
-        return super().update(instance, validated_data)
+        instance.save()
+        return instance
 
 
 class BasketItemSerializer(serializers.ModelSerializer):

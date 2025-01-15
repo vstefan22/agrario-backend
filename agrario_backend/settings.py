@@ -36,7 +36,7 @@ FRONTEND_URL = os.getenv('FRONTEND_URL')
 BACKEND_URL = os.getenv('BACKEND_URL')
 STRIPE_SECRET_KEY = os.getenv('STRIPE_SECRET_KEY')
 STRIPE_ENDPOINT_SECRET = os.getenv('STRIPE_ENDPOINT_SECRET')
-STRIPE_SUCCESS_URL = "https://your-backend-url/api/payments/success/"
+
 STRIPE_CANCEL_URL = "https://your-backend-url/api/payments/cancel/"
 
 
@@ -166,7 +166,7 @@ REST_FRAMEWORK = {
         'rest_framework.authentication.TokenAuthentication',
     ],
     'DEFAULT_PERMISSION_CLASSES': [
-        # 'rest_framework.permissions.IsAuthenticated',
+        'rest_framework.permissions.IsAuthenticated',
     ],
     'EXCEPTION_HANDLER': 'rest_framework.views.exception_handler',
 }
@@ -281,8 +281,8 @@ STORAGES = {
     },
 }
 
-GDAL_LIBRARY_PATH = r"C:\Users\merlin\anaconda3\envs\agrario_env\Library\bin\gdal.dll"
-GEOS_LIBRARY_PATH  = r"C:\Users\merlin\anaconda3\envs\agrario_env\Library\bin\geos_c.dll"
+#GDAL_LIBRARY_PATH = r"C:\Users\gacic\anaconda3\envs\agrario_env\Library\bin\gdal.dll"
+#GEOS_LIBRARY_PATH  = r"C:\Users\gacic\anaconda3\envs\agrario_env\Library\bin\geos_c.dll"
 
 # Static files configuration
 STATIC_URL = "static/"

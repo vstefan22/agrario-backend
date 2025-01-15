@@ -4,6 +4,8 @@ Provides endpoints for managing land use, parcels, area offers, and associated d
 """
 
 import logging
+from stripe.error import InvalidRequestError
+from django.conf import settings
 from decimal import Decimal
 from django.contrib.gis.geos import GEOSGeometry
 from django.contrib.gis.db.models.functions import Transform
@@ -40,6 +42,9 @@ from .serializers import (
 from accounts.firebase_auth import verify_firebase_token
 
 from django.contrib.gis.db.models.functions import Transform
+import stripe
+
+stripe.api_key = settings.STRIPE_SECRET_KEY
 
 
 class ParcelGeoViewSet(viewsets.ModelViewSet):
@@ -250,14 +255,15 @@ class ParcelViewSet(viewsets.ModelViewSet):
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-    @action(detail=True, methods=["post"], permission_classes=[FirebaseIsAuthenticated])
+    @action(detail=True, methods=["delete"], permission_classes=[FirebaseIsAuthenticated])
     def remove_from_basket(self, request, pk=None):
         """
         Remove a parcel from the basket stored in the database.
         """
         try:
             parcel = self.get_object()
-            basket_item = BasketItem.objects.filter(user=request.user, parcel=parcel).first()
+            basket_item = BasketItem.objects.filter(
+                user=request.user, parcel=parcel).first()
             if not basket_item:
                 return Response({"error": "Parcel not in basket."}, status=status.HTTP_400_BAD_REQUEST)
             basket_item.delete()
@@ -310,21 +316,24 @@ class ParcelViewSet(viewsets.ModelViewSet):
 
         # Example discount validation logic
         # Use Decimal for discounts
-        valid_codes = {"SAVE10": Decimal("0.1"), "SAVE20": Decimal("0.2")}
-        discount = valid_codes.get(discount_code.upper())
-        if not discount:
+        try:
+            # Validate the discount code with Stripe
+            coupon = stripe.Coupon.retrieve(discount_code)
+            if not coupon.valid:
+                return Response({"error": "Invalid or expired discount code."}, status=status.HTTP_400_BAD_REQUEST)
+        except InvalidRequestError:
             return Response({"error": "Invalid discount code."}, status=status.HTTP_400_BAD_REQUEST)
 
-        user_email = request.user_email
-        if user_email not in self.basket or not self.basket[user_email]:
+        basket = BasketItem.objects.filter(user=request.user).exists()
+        if not basket:
             return Response({"error": "Basket is empty."}, status=status.HTTP_400_BAD_REQUEST)
 
-        parcels = Parcel.objects.filter(id__in=self.basket[user_email])
-        total_cost = sum(Decimal(parcel.area_square_meters) * Decimal(10)
-                         for parcel in parcels)  # Ensure total_cost is Decimal
-        tax = total_cost * Decimal("0.2")  # Use Decimal for tax rate
-        final_total = total_cost + tax
-        discounted_total = final_total * (1 - discount)
+        summary = get_basket_summary(request.user)
+        final_total = summary['subtota']
+        discount_amount = Decimal(coupon.percent_off or 0) / \
+            100 if coupon.percent_off else Decimal(
+                coupon.amount_off or 0) / 100
+        discounted_total = final_total - discount_amount
 
         return Response(
             {
@@ -429,11 +438,13 @@ class ParcelViewSet(viewsets.ModelViewSet):
                 identifier=parcel.id, visible_for="USER", purchase_type="analyse_plus"
             ).exists()
 
-            parcel_serializer = ParcelSerializer(parcel, context={'request': request})
+            parcel_serializer = ParcelSerializer(
+                parcel, context={'request': request})
 
             offer_data = {}
             if parcel.appear_in_offer:
-                offer_serializer = AreaOfferSerializer(parcel.appear_in_offer, context={'request': request})
+                offer_serializer = AreaOfferSerializer(
+                    parcel.appear_in_offer, context={'request': request})
                 offer_data = offer_serializer.data
 
             if not report_purchased:
@@ -454,7 +465,6 @@ class ParcelViewSet(viewsets.ModelViewSet):
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-
     def get_queryset(self):
         """
         Add filtering functionality for parcels.
@@ -467,17 +477,20 @@ class ParcelViewSet(viewsets.ModelViewSet):
         cadastral_parcel = self.request.query_params.get("cadastral_parcel")
 
         if municipality_name:
-            queryset = queryset.filter(municipality_name__icontains=municipality_name)
+            queryset = queryset.filter(
+                municipality_name__icontains=municipality_name)
         if cadastral_area:
-            queryset = queryset.filter(cadastral_area__icontains=cadastral_area)
+            queryset = queryset.filter(
+                cadastral_area__icontains=cadastral_area)
         if communal_district:
-            queryset = queryset.filter(communal_district__icontains=communal_district)
+            queryset = queryset.filter(
+                communal_district__icontains=communal_district)
         if cadastral_parcel:
-            queryset = queryset.filter(cadastral_parcel__icontains=cadastral_parcel)
+            queryset = queryset.filter(
+                cadastral_parcel__icontains=cadastral_parcel)
 
         return queryset
 
-    
     @action(detail=True, methods=["post"], url_path="add-to-watchlist", permission_classes=[FirebaseIsAuthenticated])
     def add_to_watchlist(self, request, pk=None):
         """
@@ -504,7 +517,8 @@ class ParcelViewSet(viewsets.ModelViewSet):
         """
         try:
             parcel = Parcel.objects.get(id=pk)
-            watchlist_item = Watchlist.objects.get(user=request.user, parcel=parcel)
+            watchlist_item = Watchlist.objects.get(
+                user=request.user, parcel=parcel)
             watchlist_item.delete()
             return Response({"message": "Parcel removed from watchlist."}, status=status.HTTP_200_OK)
         except Parcel.DoesNotExist:
@@ -512,19 +526,20 @@ class ParcelViewSet(viewsets.ModelViewSet):
         except Watchlist.DoesNotExist:
             return Response({"error": "Parcel not in the watchlist."}, status=status.HTTP_404_NOT_FOUND)
 
-
     @action(detail=False, methods=["get"], url_path="watchlist", permission_classes=[FirebaseIsAuthenticated])
     def list_watchlist(self, request):
         """
         List all parcels in the user's watchlist with criteria from AreaOffer.
         """
-        watchlist_items = Watchlist.objects.filter(user=request.user).values_list('parcel', flat=True)
+        watchlist_items = Watchlist.objects.filter(
+            user=request.user).values_list('parcel', flat=True)
         parcels_in_watchlist = Parcel.objects.filter(id__in=watchlist_items)
 
         response_data = []
 
         for parcel in parcels_in_watchlist:
-            parcel_data = ParcelSerializer(parcel, context={'request': request}).data
+            parcel_data = ParcelSerializer(
+                parcel, context={'request': request}).data
             criteria_data = parcel.appear_in_offer.criteria if parcel.appear_in_offer else {}
 
             response_data.append({
@@ -532,18 +547,20 @@ class ParcelViewSet(viewsets.ModelViewSet):
                 "criteria": criteria_data
             })
 
-        return Response({"parcels": response_data}, status=status.HTTP_200_OK)
-    
+        return Response(response_data, status=status.HTTP_200_OK)
+
     @action(detail=False, methods=["get"], url_path="registered-parcels", permission_classes=[FirebaseIsAuthenticated])
     def registered_parcels(self, request):
         """
         Vraća sve parcele koje imaju vezan AreaOffer sa odvojenim kriterijumima.
         """
-        parcels_with_offer = Parcel.objects.filter(appear_in_offer__isnull=False)
+        parcels_with_offer = Parcel.objects.filter(
+            appear_in_offer__isnull=False)
         response_data = []
 
         for parcel in parcels_with_offer:
-            parcel_data = ParcelSerializer(parcel, context={'request': request}).data
+            parcel_data = ParcelSerializer(
+                parcel, context={'request': request}).data
             criteria_data = parcel.appear_in_offer.criteria if parcel.appear_in_offer else {}
 
             response_data.append({
@@ -551,8 +568,7 @@ class ParcelViewSet(viewsets.ModelViewSet):
                 "criteria": criteria_data
             })
 
-        return Response({"parcels": response_data}, status=status.HTTP_200_OK)
-
+        return Response(response_data, status=status.HTTP_200_OK)
 
 class ParcelOwnershipPermission(IsAuthenticated):
     """
@@ -580,7 +596,8 @@ class AreaOfferViewSet(viewsets.ModelViewSet):
         # Associate parcels if parcel_ids are provided
         parcel_ids = self.request.data.get("parcel_ids", [])
         if parcel_ids:
-            parcels = Parcel.objects.filter(id__in=parcel_ids, appear_in_offer__isnull=True)
+            parcels = Parcel.objects.filter(
+                id__in=parcel_ids, appear_in_offer__isnull=True)
             for parcel in parcels:
                 parcel.appear_in_offer = area_offer
                 parcel.save()  # Explicitly save each parcel
@@ -600,9 +617,10 @@ class AreaOfferViewSet(viewsets.ModelViewSet):
 
         # Associate parcels if parcel_ids are provided
         parcel_ids = self.request.data.get("parcel_ids", [])
-        print("parcel_ids         ======>       ",parcel_ids)
+        print("parcel_ids         ======>       ", parcel_ids)
         if parcel_ids:
-            parcels = Parcel.objects.filter(id__in=parcel_ids, appear_in_offer__isnull=True)
+            parcels = Parcel.objects.filter(
+                id__in=parcel_ids, appear_in_offer__isnull=True)
             print("parcels", parcels)
             for parcel in parcels:
                 print("for parcel in parcels: ", parcel)
@@ -612,7 +630,8 @@ class AreaOfferViewSet(viewsets.ModelViewSet):
                 parcel.save()  # Save each parcel explicitly to update the relationship
 
         # Refresh the instance to include updated reverse relationships
-        area_offer = AreaOffer.objects.prefetch_related("parcels").get(pk=area_offer.pk)
+        area_offer = AreaOffer.objects.prefetch_related(
+            "parcels").get(pk=area_offer.pk)
         print("area_offer", area_offer)
 
         # Handle uploaded documents
@@ -633,20 +652,21 @@ class AreaOfferViewSet(viewsets.ModelViewSet):
         files = self.request.FILES.getlist('documents')
         for file in files:
             AreaOfferDocuments.objects.create(offer=offer, document=file)
-            
+
     @action(detail=False, methods=["get"], url_path="active_offers", permission_classes=[FirebaseIsAuthenticated])
     def list_active_offers(self, request):
         """
         Return all active area offers with status 'A'.
         """
-        #staviti kad skontamo sa statusima sta kako gde
+        # staviti kad skontamo sa statusima sta kako gde
         # active_offers = AreaOffer.objects.filter(status=AreaOffer.OfferStatus.ACTIVE)
         active_offers = AreaOffer.objects.all()
 
-        serializer = AreaOfferSerializer(active_offers, many=True, context={'request': request})
+        serializer = AreaOfferSerializer(
+            active_offers, many=True, context={'request': request})
 
         return Response({"offers": serializer.data}, status=status.HTTP_200_OK)
-    
+
     @action(detail=True, methods=["post"], url_path="submit_offer", permission_classes=[FirebaseIsAuthenticated])
     def submit_offer(self, request, pk=None):
         """
@@ -667,7 +687,8 @@ class AreaOfferViewSet(viewsets.ModelViewSet):
             confirmation_data["offer"] = str(offer.identifier)
             confirmation_data["confirmed_by"] = str(user.id)
 
-            serializer = AreaOfferConfirmationSerializer(data=confirmation_data)
+            serializer = AreaOfferConfirmationSerializer(
+                data=confirmation_data)
 
             if serializer.is_valid():
                 serializer.save()
@@ -679,21 +700,24 @@ class AreaOfferViewSet(viewsets.ModelViewSet):
             return Response({"error": "Offer does not exist."}, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-    
+
     @action(detail=False, methods=["get"], url_path="submitted-offers", permission_classes=[FirebaseIsAuthenticated])
     def submitted_offers(self, request):
         try:
             user = request.user
-            user_confirmations = AreaOfferConfirmation.objects.filter(confirmed_by=user)
+            user_confirmations = AreaOfferConfirmation.objects.filter(
+                confirmed_by=user)
 
             response_data = []
 
             for confirmation in user_confirmations:
                 offer = confirmation.offer
 
-                offer_serializer = AreaOfferSerializer(offer, context={'request': request})
+                offer_serializer = AreaOfferSerializer(
+                    offer, context={'request': request})
 
-                confirmation_serializer = AreaOfferConfirmationSerializer(confirmation, context={'request': request})
+                confirmation_serializer = AreaOfferConfirmationSerializer(
+                    confirmation, context={'request': request})
 
                 response_data.append({
                     "offer": offer_serializer.data,
@@ -704,12 +728,13 @@ class AreaOfferViewSet(viewsets.ModelViewSet):
 
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-    
+
     @action(detail=True, methods=["get"], url_path="submitted-offers", permission_classes=[FirebaseIsAuthenticated])
     def retrieve_submitted_offer(self, request, pk=None):
 
         try:
-            offer_confirmation = get_object_or_404(AreaOfferConfirmation, identifier=pk)
+            offer_confirmation = get_object_or_404(
+                AreaOfferConfirmation, identifier=pk)
 
             if offer_confirmation.confirmed_by != request.user:
                 return Response(
@@ -719,9 +744,11 @@ class AreaOfferViewSet(viewsets.ModelViewSet):
 
             offer = offer_confirmation.offer
 
-            offer_serializer = AreaOfferSerializer(offer, context={'request': request})
+            offer_serializer = AreaOfferSerializer(
+                offer, context={'request': request})
 
-            confirmation_serializer = AreaOfferConfirmationSerializer(offer_confirmation, context={'request': request})
+            confirmation_serializer = AreaOfferConfirmationSerializer(
+                offer_confirmation, context={'request': request})
 
             response_data = {
                 "offer": offer_serializer.data,
@@ -734,12 +761,13 @@ class AreaOfferViewSet(viewsets.ModelViewSet):
             return Response({"error": "Offer confirmation does not exist."}, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-    
+
     @action(detail=True, methods=["patch"], url_path="edit-submitted-offers", permission_classes=[FirebaseIsAuthenticated])
     def update_submitted_offer(self, request, pk=None):
 
         try:
-            offer_confirmation = get_object_or_404(AreaOfferConfirmation, identifier=pk)
+            offer_confirmation = get_object_or_404(
+                AreaOfferConfirmation, identifier=pk)
 
             if offer_confirmation.confirmed_by != request.user:
                 return Response(

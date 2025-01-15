@@ -6,6 +6,7 @@ from django.conf import settings
 
 logger = logging.getLogger(__name__)
 
+
 class Attachment(models.Model):
     """
     Model for storing file attachments for messages.
@@ -15,7 +16,8 @@ class Attachment(models.Model):
 
 
 class Chat(models.Model):
-    identifier = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    identifier = models.UUIDField(
+        primary_key=True, default=uuid.uuid4, editable=False)
     user1 = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='chats_as_user1'
     )
@@ -27,11 +29,13 @@ class Chat(models.Model):
     def __str__(self):
         return f"Chat {self.identifier} between {self.user1} and {self.user2}"
 
+
 class Message(models.Model):
     SUBJECT_CHOICES = [
-        ('General Inquiry', 'General Inquiry'),
-        ('Auction Question', 'Auction Question'),
-        ('Support Request', 'Support Request'),
+
+        ('Flurstücksanalyse PLUS', 'Flurstücksanalyse PLUS'),
+        ('Angebot erstellen', 'Angebot erstellen'),
+        ('Sonstiges', 'Sonstiges'),
     ]
     identifier = models.UUIDField(
         primary_key=True,
