@@ -590,60 +590,49 @@ class AreaOfferViewSet(viewsets.ModelViewSet):
         """
         Handle parcel associations and dynamically set the created_by field.
         """
-        # Save the AreaOffer with the created_by field dynamically set
+        
+        parcel_ids = self.request.data.get("parcel_ids", [])
+
+        for parcel_id in parcel_ids:
+            try:
+                parcel = Parcel.objects.get(pk=parcel_id)
+
+                if parcel.appear_in_offer:
+                    raise PermissionDenied(
+                        detail=f"Parcel with ID {parcel.id} is already associated with another AreaOffer."
+                    )
+
+                if parcel.created_by != self.request.user:
+                    raise PermissionDenied(
+                        detail=f"You do not have permission to add the parcel with ID {parcel.id} because it is not owned by you."
+                    )
+
+            except Parcel.DoesNotExist:
+                raise PermissionDenied(
+                    detail=f"Parcel with ID {parcel_id} does not exist."
+                )
+
         area_offer = serializer.save(created_by=self.request.user)
 
-        # Associate parcels if parcel_ids are provided
-        parcel_ids = self.request.data.get("parcel_ids", [])
         if parcel_ids:
-            parcels = Parcel.objects.filter(
-                id__in=parcel_ids, appear_in_offer__isnull=True)
+            parcels = Parcel.objects.filter(id__in=parcel_ids, appear_in_offer__isnull=True)
             for parcel in parcels:
                 parcel.appear_in_offer = area_offer
-                parcel.save()  # Explicitly save each parcel
+                parcel.save()
 
-        # Refresh the instance to include updated reverse relationships
-        area_offer.refresh_from_db()
+            area_offer = AreaOffer.objects.prefetch_related(
+                "parcels").get(pk=area_offer.pk)
+            print("area_offer", area_offer)
 
-        # Handle uploaded documents
-        self._handle_uploaded_files(area_offer)
-
-    def perform_create(self, serializer):
-        """
-        Handle parcel associations and dynamically set the created_by field.
-        """
-        # Save the AreaOffer with the created_by field dynamically set
-        area_offer = serializer.save(created_by=self.request.user)
-
-        # Associate parcels if parcel_ids are provided
-        parcel_ids = self.request.data.get("parcel_ids", [])
-        print("parcel_ids         ======>       ", parcel_ids)
-        if parcel_ids:
-            parcels = Parcel.objects.filter(
-                id__in=parcel_ids, appear_in_offer__isnull=True)
-            print("parcels", parcels)
-            for parcel in parcels:
-                print("for parcel in parcels: ", parcel)
-                parcel.appear_in_offer = area_offer
-                print("parcel", parcel)
-                print("appear_in_offer", parcel.appear_in_offer)
-                parcel.save()  # Save each parcel explicitly to update the relationship
-
-        # Refresh the instance to include updated reverse relationships
-        area_offer = AreaOffer.objects.prefetch_related(
-            "parcels").get(pk=area_offer.pk)
-        print("area_offer", area_offer)
-
-        # Handle uploaded documents
-        self._handle_uploaded_files(area_offer)
+            self._handle_uploaded_files(area_offer)
 
     def get_queryset(self):
         """
-        Include parcels in the queryset to ensure the relationship is fetched.
+        Return only AreaOffers created by the authenticated user.
         """
-        queryset = super().get_queryset()
-        print("queryset", queryset)
-        return queryset.prefetch_related("parcels")
+        user = self.request.user
+        queryset = AreaOffer.objects.filter(created_by=user).prefetch_related("parcels")
+        return queryset
 
     def _handle_uploaded_files(self, offer):
         """
