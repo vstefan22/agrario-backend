@@ -4,7 +4,8 @@ from .models import BasketItem
 
 
 def get_basket_summary(user):
-    basket_items = BasketItem.objects.filter(user=user).select_related("parcel")
+    basket_items = BasketItem.objects.filter(
+        user=user).select_related("parcel")
     if not basket_items.exists():
         raise ValueError("Basket is empty.")
 

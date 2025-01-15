@@ -7,95 +7,110 @@ from rest_framework.exceptions import ValidationError, PermissionDenied
 from .models import PaymentTransaction
 from subscriptions.models import PlatformSubscription
 from reports.models import Report
-from offers.models import Parcel
+from offers.services import get_basket_summary
 import logging
+from offers.models import BasketItem
+from decimal import Decimal
 
 logger = logging.getLogger(__name__)
 
 stripe.api_key = settings.STRIPE_SECRET_KEY
 
 
-class CreateStripePaymentView(APIView):
-    """
-    Handles Stripe PaymentIntent creation for Analyse Plus and Subscription upgrades.
-    """
+class StripeSessionView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
         user = request.user
         payment_type = request.data.get("payment_type")
-        amount = request.data.get("amount")
-        currency = request.data.get("currency", "usd")
-        metadata = request.data.get("metadata", {})
+        success_url = request.data.get(
+            "success_url", settings.STRIPE_SUCCESS_URL)
+        cancel_url = request.data.get("cancel_url", settings.STRIPE_CANCEL_URL)
 
-        if payment_type == "analyse_plus" and user.role != "landowner":
-            raise PermissionDenied("Only landowners can purchase reports.")
-        if payment_type == "subscription" and user.role != "developer":
-            raise PermissionDenied("Only developers can upgrade subscriptions.")
-
-        if payment_type == "analyse_plus":
-            # Retrieve the report
-            report_id = metadata.get("report_id")
-            print("report_id", report_id)
-            if not report_id:
-                return Response({"error": "Report ID is required for Analyse Plus purchase."}, status=400)
-
-            try:
-                report = Report.objects.get(identifier=report_id)
-                print("report", report)
-            except Report.DoesNotExist:
-                return Response({"error": "Invalid report ID."}, status=400)
-
-            # Ensure the report is associated with the current user
-            if not report.parcels.filter(created_by=user).exists():
-                return Response({"error": "You are not authorized to purchase this report."}, status=403)
-
-            # Set the amount based on the report
-            analyse_plus_rate = getattr(settings, "ANALYSE_PLUS_RATE", 10)
-            total_amount = sum(parcel.area_square_meters * analyse_plus_rate for parcel in report.parcels.all())
-
-            metadata.update({"report_id": report_id})
-
-        elif payment_type == "subscription":
-            # Handle subscription upgrade
-            plan_id = metadata.get("plan_id")
-            if not plan_id:
-                return Response({"error": "Plan ID is required for subscription."}, status=400)
-
-            try:
-                plan = PlatformSubscription.objects.get(id=plan_id)
-            except PlatformSubscription.DoesNotExist:
-                return Response({"error": "Invalid plan ID."}, status=400)
-
-            total_amount = plan.amount_paid_per_month
-            metadata.update({"plan_id": str(plan_id)})
-
-            print("Metadata", metadata)
+        if payment_type not in ["report", "subscription"]:
+            raise ValidationError("Invalid payment type.")
 
         try:
-            # Create Stripe PaymentIntent
-            intent = stripe.PaymentIntent.create(
-                amount=int(total_amount * 100),
-                currency=currency,
+            if payment_type == "report":
+                basket_summary = get_basket_summary(user)
+                subtotal_str = basket_summary["subtotal"].replace(
+                    ",", "").strip()
+                if not basket_summary["subtotal"]:
+                    raise ValidationError("Basket is empty.")
+
+                amount = basket_summary["subtotal"]
+                metadata = list(
+                    BasketItem.objects.values_list('id', flat=True))
+
+            elif payment_type == "subscription":
+                plan_id = request.data.get("plan_id")
+                if not plan_id:
+                    raise ValidationError(
+                        "Plan ID is required for subscription.")
+                plan = PlatformSubscription.objects.get(id=plan_id)
+                amount = plan.amount_paid_per_month
+                metadata = {"plan_id": str(plan_id)}
+            else:
+                raise ValidationError("Unsupported payment type.")
+
+            # Create Stripe Session
+            session = stripe.checkout.Session.create(
                 payment_method_types=["card"],
-                metadata=metadata
+                mode="payment",
+                line_items=[
+                    {
+                        "price_data": {
+                            "currency": "eur",
+                            "product_data": {
+                                "name": "Purchase for {}".format(payment_type),
+                            },
+                            "unit_amount": int(Decimal(subtotal_str) * 100),
+                        },
+                        "quantity": 1,
+                    },
+                ],
+                metadata=metadata,
+                success_url=success_url,
+                cancel_url=cancel_url,
             )
 
-            # Record the transaction
-            transaction = PaymentTransaction.objects.create(
+            # Record Transaction
+            PaymentTransaction.objects.create(
                 user=user,
-                amount=total_amount,
-                currency=currency,
-                stripe_payment_intent=intent["id"],
+                amount=Decimal(subtotal_str),
+                currency="USD",
+                stripe_payment_intent=session.id,
                 status="pending",
-                payment_method="card"
             )
-            print("Transaction", transaction)
 
-            return Response({"client_secret": intent["client_secret"], "transaction_id": transaction.identifier}, status=200)
+            return Response({"session_url": session.url, "payment_intent": session.id}, status=200)
+
         except stripe.error.StripeError as e:
             logger.error(f"Stripe error: {e.user_message}")
             return Response({"error": e.user_message}, status=400)
+        except Exception as e:
+            logger.error(f"Unexpected error: {str(e)}")
+            return Response({"error": str(e)}, status=500)
+
+
+class StripeSuccessView(APIView):
+    """
+    Handle Stripe payment success.
+    """
+
+    def get(self, request):
+        # You can redirect to a frontend or display a success message here
+        return Response({"message": "Payment was successful. Thank you!"}, status=200)
+
+
+class StripeCancelView(APIView):
+    """
+    Handle Stripe payment cancellation.
+    """
+
+    def get(self, request):
+        # You can redirect to a frontend or display a cancellation message here
+        return Response({"message": "Payment was cancelled. Please try again."}, status=200)
 
 
 class StripeWebhookView(APIView):
@@ -110,7 +125,8 @@ class StripeWebhookView(APIView):
         endpoint_secret = settings.STRIPE_ENDPOINT_SECRET
 
         try:
-            event = stripe.Webhook.construct_event(payload, sig_header, endpoint_secret)
+            event = stripe.Webhook.construct_event(
+                payload, sig_header, endpoint_secret)
         except ValueError:
             return Response({"error": "Invalid payload."}, status=400)
         except stripe.error.SignatureVerificationError:
@@ -122,7 +138,8 @@ class StripeWebhookView(APIView):
 
         try:
             # Retrieve and update the transaction
-            transaction = PaymentTransaction.objects.get(stripe_payment_intent=stripe_payment_intent)
+            transaction = PaymentTransaction.objects.get(
+                stripe_payment_intent=stripe_payment_intent)
             print("Transaction", transaction)
             if event_type == "payment_intent.succeeded":
                 transaction.status = "success"
@@ -130,13 +147,14 @@ class StripeWebhookView(APIView):
                 transaction.save()
                 print("Status after save:", transaction.status)
 
-                # Update report visibility
-                report_id = payment_intent["metadata"].get("report_id")
-                if report_id:
-                    report = Report.objects.filter(identifier=report_id).first()
-                    if report:
-                        report.visible_for = "USER"  # Grant user access
-                        report.save()
+                # # Update report visibility
+                # report_id = payment_intent["metadata"].get("report_id")
+                # if report_id:
+                #     report = Report.objects.filter(
+                #         identifier=report_id).first()
+                #     if report:
+                #         report.visible_for = "USER"  # Grant user access
+                #         report.save()
 
             elif event_type == "payment_intent.payment_failed":
                 transaction.status = "failed"
