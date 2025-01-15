@@ -147,21 +147,20 @@ class StripeWebhookView(APIView):
                 transaction.save()
                 print("Status after save:", transaction.status)
 
-                # Update report visibility
-                report_id = payment_intent["metadata"].get("report_id")
-                if report_id:
-                    report = Report.objects.filter(
-                        identifier=report_id).first()
-                    if report:
-                        report.visible_for = "USER"  # Grant user access
-                        report.save()
+                # # Update report visibility
+                # report_id = payment_intent["metadata"].get("report_id")
+                # if report_id:
+                #     report = Report.objects.filter(
+                #         identifier=report_id).first()
+                #     if report:
+                #         report.visible_for = "USER"  # Grant user access
+                #         report.save()
 
             elif event_type == "payment_intent.payment_failed":
                 transaction.status = "failed"
                 transaction.save()
 
         except PaymentTransaction.DoesNotExist:
-            logger.error(f"Transaction with intent {
-                         stripe_payment_intent} not found.")
+            logger.error(f"Transaction with intent {stripe_payment_intent} not found.")
 
         return Response({"status": "success"}, status=200)
