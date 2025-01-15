@@ -119,10 +119,16 @@ class FirebaseAuthentication(BaseAuthentication):
             if refresh_token:
                 try:
                     new_tokens = refresh_firebase_token(refresh_token)
-                    token = new_tokens["firebase_token"]  # Umesto access_token
+                    token = new_tokens["firebase_token"]
                     decoded_token = verify_firebase_token(token)
+
+                    if not decoded_token:
+                        raise AuthenticationFailed({"error": "Invalid or expired Firebase token after refresh."})
+
                 except AuthenticationFailed:
                     raise AuthenticationFailed({"error": "Session expired. Please log in again."})
+            else:
+                raise AuthenticationFailed({"error": "Invalid or expired Firebase token."})
 
         email = decoded_token.get("email")
         if not email:
