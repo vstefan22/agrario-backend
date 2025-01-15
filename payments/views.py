@@ -38,8 +38,14 @@ class StripeSessionView(APIView):
                 if not basket_summary["subtotal"]:
                     raise ValidationError("Basket is empty.")
 
-                metadata = {"parcel_id": list(
-                    BasketItem.objects.values_list('parcel_id', flat=True))}
+                parcel_ids = BasketItem.objects.filter(
+                    user=user).values_list('parcel_id', flat=True)
+
+                # Convert the list of parcel IDs to a string representation for Stripe metadata
+                metadata = {
+                    # Convert IDs to a comma-separated string
+                    "parcel_ids": ",".join(map(str, parcel_ids))
+                }
 
             elif payment_type == "subscription":
                 cancel_url = f"{FRONTEND_URL}/developer"
@@ -160,6 +166,7 @@ class StripeWebhookView(APIView):
                 transaction.save()
 
         except PaymentTransaction.DoesNotExist:
-            logger.error(f"Transaction with intent {stripe_payment_intent} not found.")
+            logger.error(f"Transaction with intent {
+                         stripe_payment_intent} not found.")
 
         return Response({"status": "success"}, status=200)
