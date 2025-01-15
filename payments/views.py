@@ -24,13 +24,14 @@ class StripeSessionView(APIView):
     def post(self, request):
         user = request.user
         payment_type = request.data.get("payment_type")
-        success_url = f"{FRONTEND_URL}/my-plots/thank-you-order-request"
 
         if payment_type not in ["report", "subscription"]:
             raise ValidationError("Invalid payment type.")
 
         try:
             if payment_type == "report":
+                success_url = f"{
+                    FRONTEND_URL}/landowner/my-plots/thank-you-order-request"
                 cancel_url = f"{FRONTEND_URL}/landowner"
                 basket_summary = get_basket_summary(user)
                 subtotal_str = basket_summary["subtotal"].replace(
@@ -49,6 +50,7 @@ class StripeSessionView(APIView):
 
             elif payment_type == "subscription":
                 cancel_url = f"{FRONTEND_URL}/developer"
+                success_url = f"{FRONTEND_URL}/developer/profile/subscribe"
                 plan_id = request.data.get("plan_id")
                 if not plan_id:
                     raise ValidationError(
@@ -166,6 +168,7 @@ class StripeWebhookView(APIView):
                 transaction.save()
 
         except PaymentTransaction.DoesNotExist:
-            logger.error(f"Transaction with intent {stripe_payment_intent} not found.")
+            logger.error(f"Transaction with intent {
+                         stripe_payment_intent} not found.")
 
         return Response({"status": "success"}, status=200)
