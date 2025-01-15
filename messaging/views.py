@@ -1,3 +1,4 @@
+from rest_framework.pagination import PageNumberPagination
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -12,7 +13,6 @@ import uuid
 import logging
 from rest_framework.exceptions import ValidationError, PermissionDenied
 logger = logging.getLogger(__name__)
-from rest_framework.pagination import PageNumberPagination
 
 
 class ChatViewSet(viewsets.ModelViewSet):
@@ -36,7 +36,7 @@ class ChatViewSet(viewsets.ModelViewSet):
         chats = self.get_queryset()
         serializer = self.get_serializer(chats, many=True)
         return Response(serializer.data)
-    
+
 
 class MessageViewSet(viewsets.ModelViewSet):
     queryset = Message.objects.all()
@@ -45,13 +45,14 @@ class MessageViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         sender = self.request.user
-        agrario_support = MarketUser.objects.get(email="support@agrario.com")
+        agrario_support = MarketUser.objects.filter(is_superuser=True)
 
-        # Ensure chat is created between the sender and Agrario Support
-        chat, created = Chat.objects.get_or_create(user1=sender, user2=agrario_support)
-
-        # Save the message and pass the chat explicitly
-        serializer.save(sender=sender, chat=chat)
+        for acc in agrario_support:
+            # Ensure chat is created between the sender and Agrario Support
+            chat, created = Chat.objects.get_or_create(
+                user1=sender, user2=acc)
+            # Save the message and pass the chat explicitly
+            serializer.save(sender=sender, chat=chat)
 
     @action(detail=True, methods=['get'], url_path='conversation')
     def get_conversation(self, request, pk=None):
@@ -66,7 +67,7 @@ class MessageViewSet(viewsets.ModelViewSet):
         messages = Message.objects.filter(chat=chat).order_by('created_at')
         serializer = self.get_serializer(messages, many=True)
         return Response(serializer.data)
-    
+
     def destroy(self, request, *args, **kwargs):
         """
         Archive a message instead of deleting it.
@@ -78,7 +79,7 @@ class MessageViewSet(viewsets.ModelViewSet):
         instance.archived = True
         instance.save()
         return Response({"message": "Message archived successfully."}, status=status.HTTP_204_NO_CONTENT)
-    
+
     @action(detail=False, methods=['get'], url_path='unread-count')
     def unread_count(self, request):
         """
@@ -87,7 +88,7 @@ class MessageViewSet(viewsets.ModelViewSet):
         user = self.request.user
         count = Message.objects.filter(recipient=user, is_read=False).count()
         return Response({"unread_count": count}, status=status.HTTP_200_OK)
-    
+
     @action(detail=True, methods=['patch'], url_path='mark-as-read')
     def mark_as_read(self, request, pk=None):
         """
@@ -99,9 +100,10 @@ class MessageViewSet(viewsets.ModelViewSet):
             return Response({"error": "Chat not found."}, status=status.HTTP_404_NOT_FOUND)
 
         # Mark messages as read
-        Message.objects.filter(chat=chat, recipient=user, is_read=False).update(is_read=True)
+        Message.objects.filter(chat=chat, recipient=user,
+                               is_read=False).update(is_read=True)
         return Response({"message": "Messages marked as read."}, status=status.HTTP_200_OK)
-    
+
     def retrieve(self, request, *args, **kwargs):
         """
         Retrieve a single message and mark it as read if the authenticated user is part of the chat.
@@ -116,7 +118,7 @@ class MessageViewSet(viewsets.ModelViewSet):
 
         serializer = self.get_serializer(instance)
         return Response(serializer.data)
-    
+
     @action(detail=False, methods=['post'], url_path='admin-message')
     def admin_message(self, request):
         """
@@ -152,7 +154,8 @@ class MessageViewSet(viewsets.ModelViewSet):
         Allow superusers to send a broadcast message to all users.
         """
         if not request.user.is_superuser:
-            raise PermissionDenied("Only superusers can send broadcast messages.")
+            raise PermissionDenied(
+                "Only superusers can send broadcast messages.")
 
         subject = request.data.get("subject", "Broadcast Message")
         body = request.data.get("body", "")
