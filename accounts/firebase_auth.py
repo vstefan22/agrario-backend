@@ -123,6 +123,9 @@ class FirebaseAuthentication(BaseAuthentication):
                     decoded_token = verify_firebase_token(token)
                 except AuthenticationFailed:
                     raise AuthenticationFailed({"error": "Session expired. Please log in again."})
+        
+        if not decoded_token:
+            raise AuthenticationFailed({"error": "Invalid or expired Firebase token."})
 
         email = decoded_token.get("email")
         if not email:
