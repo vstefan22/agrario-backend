@@ -166,7 +166,6 @@ class StripeWebhookView(APIView):
                 transaction.save()
 
         except PaymentTransaction.DoesNotExist:
-            logger.error(f"Transaction with intent {
-                         stripe_payment_intent} not found.")
+            logger.error(f"Transaction with intent {stripe_payment_intent} not found.")
 
         return Response({"status": "success"}, status=200)
