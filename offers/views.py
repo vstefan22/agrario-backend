@@ -324,8 +324,8 @@ class ParcelViewSet(viewsets.ModelViewSet):
         except InvalidRequestError:
             return Response({"error": "Invalid discount code."}, status=status.HTTP_400_BAD_REQUEST)
 
-        user_email = request.user_email
-        if user_email not in self.basket or not self.basket[user_email]:
+        basket = BasketItem.objects.filter(user=request.user).exists()
+        if not basket:
             return Response({"error": "Basket is empty."}, status=status.HTTP_400_BAD_REQUEST)
 
         summary = get_basket_summary(request.user)

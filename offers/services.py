@@ -12,12 +12,8 @@ def get_basket_summary(user):
     analyse_plus_rate = settings.ANALYSE_PLUS_RATE  # Rate per square meter
     tax_rate = Decimal(settings.TAX_RATE)  # e.g., 0.19 for 19%
 
-    # Compute totals
-    total_cost = sum(
-        Decimal(item.parcel.area_square_meters) * analyse_plus_rate
-        for item in basket_items
-    )
     number_of_items = basket_items.count()
+    total_cost = number_of_items * analyse_plus_rate
     tax_amount = total_cost * tax_rate
     subtotal = total_cost + tax_amount
 
