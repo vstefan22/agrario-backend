@@ -3,7 +3,7 @@
 Provides endpoints for managing land use, parcels, area offers, and associated documents.
 """
 
-import logging
+import logging, json
 from stripe.error import InvalidRequestError
 from django.conf import settings
 from decimal import Decimal
@@ -13,7 +13,7 @@ from django.shortcuts import get_object_or_404
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import BasePermission, IsAuthenticated
-from rest_framework.exceptions import PermissionDenied
+from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from .services import get_basket_summary
@@ -592,6 +592,11 @@ class AreaOfferViewSet(viewsets.ModelViewSet):
         """
         
         parcel_ids = self.request.data.get("parcel_ids", [])
+        if isinstance(parcel_ids, str):
+            try:
+                parcel_ids = json.loads(parcel_ids)
+            except json.JSONDecodeError:
+                raise ValidationError({"parcel_ids": "Invalid format. Expected a list or JSON array."})
 
         for parcel_id in parcel_ids:
             try:
