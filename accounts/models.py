@@ -3,20 +3,32 @@
 Defines custom user model and related entities for the accounts application.
 """
 
-import uuid
+import uuid, datetime
 
-from django.core.validators import MinLengthValidator
-from django.core.validators import MinLengthValidator
+from django.core.validators import MinLengthValidator, URLValidator, MaxValueValidator, MinValueValidator
 from django.contrib.auth.models import AbstractUser
-from phonenumber_field.modelfields import PhoneNumberField
-from phonenumber_field.modelfields import PhoneNumberField
 from django.db import models
-from django.core.validators import MinValueValidator, MaxValueValidator
-import datetime
-from django.core.exceptions import ObjectDoesNotExist
+from django.core.exceptions import ValidationError
 from django.apps import apps
 # from django.contrib.gis.db import models as models2
 from django.contrib.auth.models import BaseUserManager
+
+def validate_url(value):
+
+    validator = URLValidator()
+    
+    if value.startswith(('http://', 'https://')):
+        try:
+            validator(value)
+        except ValidationError:
+            raise ValidationError("URL is not valid.")
+    elif value.startswith('www.'):
+        try:
+            validator(f"https://{value}")
+        except ValidationError:
+            raise ValidationError("URL is not valid.")
+    else:
+        raise ValidationError("URL must start with 'http://', 'https://' or 'www.'.")
 
 class MarketUserManager(BaseUserManager):
     """
@@ -72,11 +84,15 @@ class MarketUser(AbstractUser):
     email = models.EmailField(unique=True)
     first_name = models.CharField(max_length=255)
     last_name = models.CharField(max_length=255)
-    phone_number = PhoneNumberField(
-        region="DE", max_length=20, blank=True, null=True)
+    phone_number = models.CharField(max_length=20, blank=True, null=True)
     address = models.CharField(max_length=255, null=True, blank=True)
     company_name = models.CharField(max_length=255, null=True, blank=True)
-    company_website = models.URLField(null=True, blank=True)
+    company_website = models.CharField(
+        max_length=255,
+        null=True,
+        blank=True,
+        validators=[validate_url]
+    )
     position = models.CharField(max_length=100, null=True, blank=True)
     profile_picture = models.FileField(
         upload_to="profile_pictures/", blank=True)
