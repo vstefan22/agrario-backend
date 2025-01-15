@@ -6,15 +6,16 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.exceptions import ValidationError, PermissionDenied
 from .models import PaymentTransaction
 from subscriptions.models import PlatformSubscription
-from reports.models import Report
+
 from offers.services import get_basket_summary
 import logging
-from offers.models import BasketItem
+from offers.models import BasketItem, Parcel
 from decimal import Decimal
 
 logger = logging.getLogger(__name__)
 
 stripe.api_key = settings.STRIPE_SECRET_KEY
+FRONTEND_URL = settings.FRONTEND_URL
 
 
 class StripeSessionView(APIView):
@@ -23,26 +24,25 @@ class StripeSessionView(APIView):
     def post(self, request):
         user = request.user
         payment_type = request.data.get("payment_type")
-        success_url = request.data.get(
-            "success_url", settings.STRIPE_SUCCESS_URL)
-        cancel_url = request.data.get("cancel_url", settings.STRIPE_CANCEL_URL)
+        success_url = f"{FRONTEND_URL}/my-plots/thank-you-order-request"
 
         if payment_type not in ["report", "subscription"]:
             raise ValidationError("Invalid payment type.")
 
         try:
             if payment_type == "report":
+                cancel_url = f"{FRONTEND_URL}/landowner"
                 basket_summary = get_basket_summary(user)
                 subtotal_str = basket_summary["subtotal"].replace(
                     ",", "").strip()
                 if not basket_summary["subtotal"]:
                     raise ValidationError("Basket is empty.")
 
-                amount = basket_summary["subtotal"]
-                metadata = list(
-                    BasketItem.objects.values_list('id', flat=True))
+                metadata = {"parcel_id": list(
+                    BasketItem.objects.values_list('parcel_id', flat=True))}
 
             elif payment_type == "subscription":
+                cancel_url = f"{FRONTEND_URL}/developer"
                 plan_id = request.data.get("plan_id")
                 if not plan_id:
                     raise ValidationError(
@@ -147,14 +147,13 @@ class StripeWebhookView(APIView):
                 transaction.save()
                 print("Status after save:", transaction.status)
 
-                # # Update report visibility
-                # report_id = payment_intent["metadata"].get("report_id")
-                # if report_id:
-                #     report = Report.objects.filter(
-                #         identifier=report_id).first()
-                #     if report:
-                #         report.visible_for = "USER"  # Grant user access
-                #         report.save()
+                parcel_id = payment_intent["metadata"].get("parcel_id")
+                if parcel_id:
+                    parcel = Parcel.objects.filter(
+                        id=parcel_id).first()
+                    if parcel:
+                        parcel.analyse_plus = True
+                        parcel.save()
 
             elif event_type == "payment_intent.payment_failed":
                 transaction.status = "failed"
