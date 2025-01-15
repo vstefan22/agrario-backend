@@ -218,10 +218,6 @@ class MarketUserViewSet(viewsets.ModelViewSet):
             status=status.HTTP_200_OK,
         )
 
-
-
-
-
 class LoginView(APIView):
     """
     Handles user login and returns a Firebase token upon successful authentication.
@@ -414,13 +410,14 @@ class RefreshTokenView(APIView):
         try:
             tokens = refresh_firebase_token(refresh_token)
             return Response({
-                "firebase_token": tokens["access_token"],
+                "firebase_token": tokens["firebase_token"],
                 "refresh_token": tokens["refresh_token"],
                 "expires_in": tokens["expires_in"],
             }, status=status.HTTP_200_OK)
         except AuthenticationFailed as e:
             return Response({"error": str(e)}, status=status.HTTP_401_UNAUTHORIZED)
         except Exception as e:
+            logger.error(f"Unexpected error: {str(e)}")
             return Response({"error": f"An unexpected error occurred: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 class RoleDashboardView(APIView):
