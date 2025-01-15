@@ -510,7 +510,7 @@ class ParcelViewSet(viewsets.ModelViewSet):
         except Parcel.DoesNotExist:
             return Response({"error": "Parcel not found."}, status=status.HTTP_404_NOT_FOUND)
 
-    @action(detail=True, methods=["post"], url_path="remove-from-watchlist", permission_classes=[FirebaseIsAuthenticated])
+    @action(detail=True, methods=["delete"], url_path="remove-from-watchlist", permission_classes=[FirebaseIsAuthenticated])
     def remove_from_watchlist(self, request, pk=None):
         """
         Remove a parcel from the user's watchlist using parcel ID from the URL.
