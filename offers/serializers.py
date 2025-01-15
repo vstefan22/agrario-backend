@@ -91,7 +91,8 @@ class ParcelSerializer(serializers.ModelSerializer):
             "created_by",
             "polygon",            # read-only
             "polygon_coords",     # write-only
-            "alkis_feature_id"
+            "alkis_feature_id",
+            "analyse_plus",
         ]
         read_only_fields = ["created_by", "area_square_meters", "polygon"]
 

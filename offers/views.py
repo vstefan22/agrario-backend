@@ -608,34 +608,34 @@ class AreaOfferViewSet(viewsets.ModelViewSet):
         # Handle uploaded documents
         self._handle_uploaded_files(area_offer)
 
-    def perform_create(self, serializer):
-        """
-        Handle parcel associations and dynamically set the created_by field.
-        """
-        # Save the AreaOffer with the created_by field dynamically set
-        area_offer = serializer.save(created_by=self.request.user)
+    # def perform_create(self, serializer):
+    #     """
+    #     Handle parcel associations and dynamically set the created_by field.
+    #     """
+    #     # Save the AreaOffer with the created_by field dynamically set
+    #     area_offer = serializer.save(created_by=self.request.user)
 
-        # Associate parcels if parcel_ids are provided
-        parcel_ids = self.request.data.get("parcel_ids", [])
-        print("parcel_ids         ======>       ", parcel_ids)
-        if parcel_ids:
-            parcels = Parcel.objects.filter(
-                id__in=parcel_ids, appear_in_offer__isnull=True)
-            print("parcels", parcels)
-            for parcel in parcels:
-                print("for parcel in parcels: ", parcel)
-                parcel.appear_in_offer = area_offer
-                print("parcel", parcel)
-                print("appear_in_offer", parcel.appear_in_offer)
-                parcel.save()  # Save each parcel explicitly to update the relationship
+    #     # Associate parcels if parcel_ids are provided
+    #     parcel_ids = self.request.data.get("parcel_ids", [])
+    #     print("parcel_ids         ======>       ", parcel_ids)
+    #     if parcel_ids:
+    #         parcels = Parcel.objects.filter(
+    #             id__in=parcel_ids, appear_in_offer__isnull=True)
+    #         print("parcels", parcels)
+    #         for parcel in parcels:
+    #             print("for parcel in parcels: ", parcel)
+    #             parcel.appear_in_offer = area_offer
+    #             print("parcel", parcel)
+    #             print("appear_in_offer", parcel.appear_in_offer)
+    #             parcel.save()  # Save each parcel explicitly to update the relationship
 
-        # Refresh the instance to include updated reverse relationships
-        area_offer = AreaOffer.objects.prefetch_related(
-            "parcels").get(pk=area_offer.pk)
-        print("area_offer", area_offer)
+    #     # Refresh the instance to include updated reverse relationships
+    #     area_offer = AreaOffer.objects.prefetch_related(
+    #         "parcels").get(pk=area_offer.pk)
+    #     print("area_offer", area_offer)
 
-        # Handle uploaded documents
-        self._handle_uploaded_files(area_offer)
+    #     # Handle uploaded documents
+    #     self._handle_uploaded_files(area_offer)
 
     def get_queryset(self):
         """

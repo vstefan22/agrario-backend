@@ -388,6 +388,7 @@ class ProjectDeveloperSerializer(serializers.ModelSerializer):
     electromobility = serializers.BooleanField(source="interest.electromobility", required=False)
     ecological_upgrading = serializers.BooleanField(source="interest.ecological_upgrading", required=False)
     other = serializers.CharField(source="interest.other", required=False, allow_blank=True)
+    tier = serializers.CharField(source="tier.tier", read_only=True)
 
     class Meta:
         model = ProjectDeveloper
@@ -419,6 +420,7 @@ class ProjectDeveloperSerializer(serializers.ModelSerializer):
             "ecological_upgrading",
             "other",
             "role",
+            "tier",
         ]
         read_only_fields = ["id", "email"]
 
@@ -473,6 +475,14 @@ class ProjectDeveloperSerializer(serializers.ModelSerializer):
         instance.save()
 
         return instance
+    
+    def get_tier(self, obj):
+        """
+        Get the name of the tier instead of the ID.
+        """
+        if obj.tier:
+            return obj.tier.tier
+        return None
 
 class DeveloperDashboardSerializer(serializers.ModelSerializer):
     """

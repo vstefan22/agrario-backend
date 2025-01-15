@@ -180,21 +180,11 @@ class MarketUserViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        # Retrieve purchased reports
-        purchased_reports = Report.objects.filter(
-            parcels__created_by__email=user_email,  # Only reports linked to parcels created by the user
-            purchase_type="analyse_plus"  # Ensure only purchased reports are considered
-        ).distinct()
-
-        # Serialize purchased reports
-        report_serializer = ReportSerializer(purchased_reports, many=True)
-
         # Retrieve successful transactions
         transactions = PaymentTransaction.objects.filter(
             user__email=user_email,
             status="success"
         )
-        print("user_email", user_email)
         print("transactions", transactions)
 
         # Serialize transactions
@@ -212,7 +202,6 @@ class MarketUserViewSet(viewsets.ModelViewSet):
         return Response(
             {
                 "message": "Your purchased items.",
-                "purchased_reports": report_serializer.data,
                 "transactions": transactions_data,
             },
             status=status.HTTP_200_OK,
