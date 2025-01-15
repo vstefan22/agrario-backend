@@ -32,7 +32,6 @@ class Chat(models.Model):
 
 class Message(models.Model):
     SUBJECT_CHOICES = [
-
         ('Flurstücksanalyse PLUS', 'Flurstücksanalyse PLUS'),
         ('Angebot erstellen', 'Angebot erstellen'),
         ('Sonstiges', 'Sonstiges'),
@@ -51,6 +50,11 @@ class Message(models.Model):
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
         related_name="sent_messages"
+    )
+    recipient = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="received_messages"
     )
     subject = models.CharField(
         max_length=64,

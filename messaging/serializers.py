@@ -31,6 +31,7 @@ class SenderSerializer(serializers.ModelSerializer):
 
 class MessageSerializer(serializers.ModelSerializer):
     sender = serializers.StringRelatedField(read_only=True)  # Display sender in response
+    recipient = serializers.StringRelatedField(read_only=True)
     is_admin_message = serializers.BooleanField(read_only=True)
     attachments = AttachmentSerializer(many=True, read_only=True)
     attachment_files = serializers.ListField(
@@ -42,7 +43,7 @@ class MessageSerializer(serializers.ModelSerializer):
     class Meta:
         model = Message
         fields = (
-            'identifier', 'sender', 'subject', 'body', 'attachments',
+            'identifier', 'sender', 'subject', 'body', 'attachments', 'recipient',
             'attachment_files', 'created_at', 'is_read', 'is_admin_message'
         )
         read_only_fields = ['identifier', 'created_at', 'is_read', 'attachments', 'sender', 'is_admin_message']

@@ -26,7 +26,7 @@ class ChatViewSet(viewsets.ModelViewSet):
         Return chats associated with the authenticated user.
         """
         user = self.request.user
-        return Chat.objects.filter(models.Q(user1=user) | models.Q(user2=user))
+        return Chat.objects.filter(models.Q(user1=user))
 
     @action(detail=False, methods=['get'], url_path='my-chats')
     def my_chats(self, request):
@@ -45,14 +45,31 @@ class MessageViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         sender = self.request.user
-        agrario_support = MarketUser.objects.filter(is_superuser=True)
+        admins = (
+            MarketUser.objects.filter(is_superuser=True)
+            .annotate(
+                chat_count=Count('chats_as_user1') + Count('chats_as_user2'),
+                message_count=Count('received_messages')
+            )
+            .order_by('chat_count', 'message_count')
+        )
 
-        for acc in agrario_support:
-            # Ensure chat is created between the sender and Agrario Support
-            chat, created = Chat.objects.get_or_create(
-                user1=sender, user2=acc)
-            # Save the message and pass the chat explicitly
-            serializer.save(sender=sender, chat=chat)
+        least_chats_admin = admins.first()
+
+        if not least_chats_admin:
+            raise serializers.ValidationError("No superusers available to receive the message.")
+
+        chat = Chat.objects.filter(
+            Q(user1=sender, user2=least_chats_admin) | Q(user1=least_chats_admin, user2=sender)
+        ).first()
+
+        if not chat:
+            chat = Chat.objects.create(user1=sender, user2=least_chats_admin)
+
+        serializer.validated_data['is_admin_message'] = True
+
+        serializer.save(sender=sender, chat=chat, recipient=least_chats_admin)
+
 
     @action(detail=True, methods=['get'], url_path='conversation')
     def get_conversation(self, request, pk=None):
@@ -98,10 +115,12 @@ class MessageViewSet(viewsets.ModelViewSet):
         chat = Chat.objects.filter(identifier=pk).first()
         if not chat:
             return Response({"error": "Chat not found."}, status=status.HTTP_404_NOT_FOUND)
+        if chat.user1 != user and chat.user2 != user:
+            return Response({"error": "You are not part of this chat."}, status=status.HTTP_403_FORBIDDEN)
 
         # Mark messages as read
         Message.objects.filter(chat=chat, recipient=user,
-                               is_read=False).update(is_read=True)
+                                is_read=False).update(is_read=True)
         return Response({"message": "Messages marked as read."}, status=status.HTTP_200_OK)
 
     def retrieve(self, request, *args, **kwargs):
