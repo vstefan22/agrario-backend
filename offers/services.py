@@ -23,9 +23,9 @@ def get_basket_summary(user):
     # Format output
     return {
         "number_of_items": number_of_items,
-        "cost_per_item": f"{analyse_plus_rate:,.2f} €",
-        "sum_of_items": f"{total_cost:,.2f} €",
-        "tax_in_percent": f"{int(tax_rate * 100)}% MWSt",
-        "tax_amount": f"{tax_amount:,.2f} €",
-        "subtotal": f"{subtotal:,.2f} €",
+        "cost_per_item": f"{analyse_plus_rate:,.2f}",
+        "sum_of_items": f"{total_cost:,.2f}",
+        "tax_in_percent": int(tax_rate * 100),
+        "tax_amount": f"{tax_amount:,.2f}",
+        "subtotal": f"{subtotal:,.2f}",
     }
