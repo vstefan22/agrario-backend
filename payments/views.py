@@ -30,8 +30,7 @@ class StripeSessionView(APIView):
 
         try:
             if payment_type == "report":
-                success_url = f"{
-                    FRONTEND_URL}/landowner/my-plots/thank-you-order-request"
+                success_url = f"{FRONTEND_URL}/landowner/my-plots/thank-you-order-request"
                 cancel_url = f"{FRONTEND_URL}/landowner"
                 basket_summary = get_basket_summary(user)
                 subtotal_str = basket_summary["subtotal"].replace(
@@ -168,7 +167,6 @@ class StripeWebhookView(APIView):
                 transaction.save()
 
         except PaymentTransaction.DoesNotExist:
-            logger.error(f"Transaction with intent {
-                         stripe_payment_intent} not found.")
+            logger.error(f"Transaction with intent {stripe_payment_intent} not found.")
 
         return Response({"status": "success"}, status=200)
