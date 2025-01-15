@@ -119,7 +119,7 @@ class FirebaseAuthentication(BaseAuthentication):
             if refresh_token:
                 try:
                     new_tokens = refresh_firebase_token(refresh_token)
-                    token = new_tokens["firebase_token"]  # Umesto access_token
+                    token = new_tokens["firebase_token"]
                     decoded_token = verify_firebase_token(token)
 
                     if not decoded_token:
