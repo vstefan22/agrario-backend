@@ -547,7 +547,7 @@ class ParcelViewSet(viewsets.ModelViewSet):
                 "criteria": criteria_data
             })
 
-        return Response({"parcels": response_data}, status=status.HTTP_200_OK)
+        return Response(response_data, status=status.HTTP_200_OK)
 
     @action(detail=False, methods=["get"], url_path="registered-parcels", permission_classes=[FirebaseIsAuthenticated])
     def registered_parcels(self, request):
@@ -568,8 +568,7 @@ class ParcelViewSet(viewsets.ModelViewSet):
                 "criteria": criteria_data
             })
 
-        return Response({"parcels": response_data}, status=status.HTTP_200_OK)
-
+        return Response(response_data, status=status.HTTP_200_OK)
 
 class ParcelOwnershipPermission(IsAuthenticated):
     """
