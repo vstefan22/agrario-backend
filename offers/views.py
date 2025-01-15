@@ -314,35 +314,46 @@ class ParcelViewSet(viewsets.ModelViewSet):
         if not discount_code:
             return Response({"error": "Discount code is required."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Example discount validation logic
-        # Use Decimal for discounts
         try:
-            # Validate the discount code with Stripe
-            coupon = stripe.Coupon.retrieve(discount_code)
-            if not coupon.valid:
+
+            promotion_codes = stripe.PromotionCode.list(code=discount_code)
+            if not promotion_codes.data:
                 return Response({"error": "Invalid or expired discount code."}, status=status.HTTP_400_BAD_REQUEST)
-        except InvalidRequestError:
-            return Response({"error": "Invalid discount code."}, status=status.HTTP_400_BAD_REQUEST)
+
+            promotion_code = promotion_codes.data[0]  # Use the first matching promotion code
+            coupon = promotion_code.coupon
+
+            if not coupon.valid:
+                return Response({"error": "The discount code is no longer valid."}, status=status.HTTP_400_BAD_REQUEST)
+        except stripe.error.InvalidRequestError as e:
+            return Response({"error": f"Stripe error: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
+
 
         basket = BasketItem.objects.filter(user=request.user).exists()
         if not basket:
             return Response({"error": "Basket is empty."}, status=status.HTTP_400_BAD_REQUEST)
 
+
         summary = get_basket_summary(request.user)
-        final_total = summary['subtota']
-        discount_amount = Decimal(coupon.percent_off or 0) / \
-            100 if coupon.percent_off else Decimal(
-                coupon.amount_off or 0) / 100
-        discounted_total = final_total - discount_amount
+        final_total = Decimal(summary["subtotal"])
+        discount_amount = Decimal(0)
+
+        if coupon.percent_off:
+            discount_amount = (Decimal(coupon.percent_off) / 100) * final_total
+        elif coupon.amount_off:
+            discount_amount = Decimal(coupon.amount_off) / 100  # Convert cents to dollars
+
+        discounted_total = max(Decimal(0), final_total - discount_amount)
 
         return Response(
-            {
-                "original_total": final_total,
-                "discounted_total": discounted_total,
-                "discount_applied": discount_code.upper(),
-            },
-            status=status.HTTP_200_OK,
-        )
+        {
+            "original_total": str(final_total),
+            "discounted_total": str(discounted_total),
+            "discount_applied": discount_code.upper(),
+            "discount_amount": str(discount_amount),
+        },
+        status=status.HTTP_200_OK,
+    )
 
     @action(detail=False, methods=["get"], permission_classes=[FirebaseIsAuthenticated])
     def order_confirmation(self, request):
